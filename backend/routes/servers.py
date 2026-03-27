@@ -4,6 +4,7 @@ import httpx
 import asyncio
 import shutil
 import docker
+from docker.errors import NotFound as DockerNotFound
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -40,14 +41,14 @@ def to_dict(s: Server) -> dict:
         "port": s.port, "max_players": s.max_players, "version": s.version, "motd": s.motd,
         "ram_min": s.ram_min, "ram_max": s.ram_max, "cpu_cores": s.cpu_cores,
         "custom_launch_command": s.custom_launch_command,
-        "avatar": f"/api/avatars/{s.avatar}" if s.avatar else None
+        "avatar": f"/api/avatars/{s.avatar}" if s.avatar else None  # type: ignore[union-attr]
     }
 
 def get_status(sid: int) -> str:
     try:
         c = dc().containers.get(cname(sid))
         return "running" if c.status == "running" else "stopped"
-    except docker.errors.NotFound:
+    except DockerNotFound:
         return "stopped"
     except:
         return "stopped"
@@ -64,7 +65,7 @@ class Create(BaseModel):
     cpu_cores: int = 1
     custom_launch_command: Optional[str] = None
 
-async def download_jar(stype: str, ver: str, path: str) -> bool:
+async def download_jar(stype: str, ver: str, path: str) -> bool:  # type: ignore[return]
     jar = os.path.join(path, "server.jar")
     try:
         async with httpx.AsyncClient(timeout=300) as c:
@@ -97,24 +98,71 @@ async def download_jar(stype: str, ver: str, path: str) -> bool:
                 with open(jar, "wb") as f: f.write(r.content)
                 return True
             elif stype == "neoforge":
-                r = await c.get("https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.json")
-                p = ver.replace("1.", "")
-                m = [v for v in r.json()["versions"] if v.startswith(p) and "alpha" not in v and "beta" not in v]
-                if not m: return False
-                r = await c.get(f"https://maven.neoforged.net/releases/net/neoforged/neoforge/{m[-1]}/neoforge-{m[-1]}-installer.jar")
-                with open(jar, "wb") as f: f.write(r.content)
-                return True
+                try:
+                    p = ver[2:]
+                    p_dot = p + "."
+                    r = await c.get("https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml")
+                    import xml.etree.ElementTree as ET
+                    root = ET.fromstring(r.text)
+                    versions = [v.text for v in root.findall(".//version") if v.text and v.text.startswith(p_dot)]
+                    if not versions:
+                        return False
+
+                    neoforge_ver = versions[-1]
+                    installer_url = f"https://maven.neoforged.net/releases/net/neoforged/neoforge/{neoforge_ver}/neoforge-{neoforge_ver}-installer.jar"
+                    r = await c.get(installer_url)
+
+                    if r.status_code != 200:
+                        return False
+
+                    tmp = os.path.join(path, "neoforge-installer.jar")
+                    with open(tmp, "wb") as f: f.write(r.content)
+                    proc = await asyncio.create_subprocess_exec(
+                        "docker", "run", "--rm", "-v", f"{path}:/server", "-w", "/server",
+                        "mc-panel-server:latest", "/opt/java/openjdk/bin/java",
+                        "-jar", "neoforge-installer.jar", "--installServer", "--server.jar",
+                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                    await proc.communicate()
+                    os.remove(tmp)
+
+                    if os.path.exists(os.path.join(path, "server.jar")):
+                        return True
+                except Exception as e:
+                    print(f"NeoForge download error: {e}")
+                    return False
             elif stype == "forge":
-                for s in ["recommended", "latest"]:
-                    r = await c.get(f"https://maven.minecraftforge.net/net/minecraftforge/forge/{ver}-{s}/forge-{ver}-{s}-installer.jar")
-                    if r.status_code == 200:
-                        tmp = os.path.join(path, "forge.jar")
-                        with open(tmp, "wb") as f: f.write(r.content)
-                        proc = await asyncio.create_subprocess_exec("java", "-jar", "forge.jar", "--installServer", cwd=path)
-                        await proc.wait()
-                        os.remove(tmp)
-                        return proc.returncode == 0
-                return False
+                try:
+                    r = await c.get(f"https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml")
+                    import xml.etree.ElementTree as ET
+                    root = ET.fromstring(r.text)
+                    versions = root.findall(".//version")
+                    matching = [v.text for v in versions if v.text and v.text.startswith(ver)]
+                    if not matching:
+                        return False
+                    
+                    forge_ver = matching[-1]
+                    installer_url = f"https://maven.minecraftforge.net/net/minecraftforge/forge/{forge_ver}/forge-{forge_ver}-installer.jar"
+                    r = await c.get(installer_url)
+                    
+                    if r.status_code != 200:
+                        return False
+                        
+                    tmp = os.path.join(path, "forge-installer.jar")
+                    with open(tmp, "wb") as f: f.write(r.content)
+                    proc = await asyncio.create_subprocess_exec(
+                        "docker", "run", "--rm", "-v", f"{path}:/server", "-w", "/server",
+                        "mc-panel-server:latest", "/opt/java/openjdk/bin/java",
+                        "-jar", "forge-installer.jar", "--installServer",
+                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                    await proc.communicate()
+                    os.remove(tmp)
+                    
+                    if os.path.exists(os.path.join(path, "libraries")):
+                        return True
+                    return False
+                except Exception as e:
+                    print(f"Forge download error: {e}")
+                    return False
     except Exception as e:
         print(f"Download error: {e}")
         return False
@@ -137,9 +185,11 @@ def get_server(sid: int, db: Session = Depends(get_db), user: User = Depends(get
 
 @router.post("/")
 async def create_server(data: Create, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    if db.query(Server).filter(Server.port == data.port).first():
-        raise HTTPException(400, "Port in use")
-    s = Server(name=data.name, owner_id=user.id, server_type=data.server_type, port=data.port,
+    port = data.port
+    while db.query(Server).filter(Server.port == port).first():
+        port += 1
+    port_changed = port != data.port
+    s = Server(name=data.name, owner_id=user.id, server_type=data.server_type, port=port,
         max_players=data.max_players, version=data.version, motd=data.motd, ram_min=data.ram_min,
         ram_max=data.ram_max, cpu_cores=data.cpu_cores, custom_launch_command=data.custom_launch_command)
     db.add(s); db.commit(); db.refresh(s)
@@ -147,7 +197,7 @@ async def create_server(data: Create, db: Session = Depends(get_db), user: User 
     os.makedirs(d, exist_ok=True)
     with open(os.path.join(d, "eula.txt"), "w") as f: f.write("eula=true\n")
     with open(os.path.join(d, "server.properties"), "w") as f:
-        f.write(f"server-port=25565\nmax-players={data.max_players}\nmotd={data.motd}\n")
+        f.write(f"server-port={port}\nmax-players={data.max_players}\nmotd={data.motd}\n")
         f.write("enable-rcon=true\nrcon.port=25575\nrcon.password=mcpanel\n")
     ok = await download_jar(data.server_type, data.version, d)
     try: dc().images.get(f"{IMAGE}:latest")
@@ -155,6 +205,9 @@ async def create_server(data: Create, db: Session = Depends(get_db), user: User 
         try: dc().images.build(path=os.path.dirname(os.path.dirname(__file__)), tag=f"{IMAGE}:latest", dockerfile="Dockerfile")
         except: pass
     r = to_dict(s); r["jar_downloaded"] = ok
+    if port_changed:
+        r["port_changed"] = True
+        r["original_port"] = data.port
     return r
 
 @router.post("/{sid}/start")
@@ -172,21 +225,45 @@ def start_server(sid: int, db: Session = Depends(get_db), user: User = Depends(g
         s.status = "running"
         db.commit()
         return {"status": "started"}
-    except docker.errors.NotFound:
+    except DockerNotFound:
         pass
     except HTTPException:
         raise
     
     d = sdir(sid, s.name)
-    if not os.path.exists(os.path.join(d, "server.jar")):
-        raise HTTPException(400, "No server.jar")
     
     java = java_cmd(s.version)
     if s.custom_launch_command:
         cmd = s.custom_launch_command.replace("{jar}", "server.jar").replace("{ram_min}", str(s.ram_min))
         cmd = cmd.replace("{ram_max}", str(s.ram_max)).replace("{java}", java).split()
     else:
-        cmd = [java, f"-Xmx{s.ram_max}M", f"-Xms{s.ram_min}M", "-jar", "server.jar", "nogui"]
+        unix_args = None
+        ua_root = os.path.join(d, "unix_args.txt")
+        if os.path.exists(ua_root):
+            unix_args = ua_root
+        else:
+            for root_dir, dirs, files in os.walk(d):
+                if "unix_args.txt" in files and root_dir != d:
+                    unix_args = os.path.join(root_dir, "unix_args.txt")
+                    break
+
+        server_jar = os.path.join(d, "server.jar")
+        has_server_jar = os.path.exists(server_jar) and os.path.getsize(server_jar) > 50000
+
+        if has_server_jar and unix_args:
+            with open(os.path.join(d, "user_jvm_args.txt"), "w") as f:
+                f.write(f"-Xmx{s.ram_max}M\n-Xms{s.ram_min}M\n-XX:+UseG1GC\n")
+            ua_rel = os.path.relpath(unix_args, d)
+            cmd = [java, "@user_jvm_args.txt", f"@{ua_rel}", "-jar", "server.jar", "nogui"]
+        elif has_server_jar:
+            cmd = [java, f"-Xmx{s.ram_max}M", f"-Xms{s.ram_min}M", "-jar", "server.jar", "nogui"]
+        elif unix_args:
+            with open(os.path.join(d, "user_jvm_args.txt"), "w") as f:
+                f.write(f"-Xmx{s.ram_max}M\n-Xms{s.ram_min}M\n-XX:+UseG1GC\n")
+            ua_rel = os.path.relpath(unix_args, d)
+            cmd = [java, "@user_jvm_args.txt", f"@{ua_rel}", "nogui"]
+        else:
+            raise HTTPException(400, "No server files found")
     
     client.containers.run(
         f"{IMAGE}:latest",
@@ -217,7 +294,7 @@ def stop_server(sid: int, db: Session = Depends(get_db), user: User = Depends(ge
     try:
         c = dc().containers.get(cname(sid))
         c.kill()
-    except docker.errors.NotFound:
+    except DockerNotFound:
         pass
     except Exception as e:
         print(f"Stop error: {e}")

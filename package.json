@@ -1,0 +1,11 @@
+{
+  "name": "enderpanel",
+  "version": "1.0.1",
+  "private": true,
+  "scripts": {
+    "start": "cd backend && python3 main.py",
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "install": "cd backend && pip install -r requirements.txt && cd ../frontend && npm install"
+  }
+}

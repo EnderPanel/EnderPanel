@@ -67,16 +67,20 @@ async def search_mods(server_id: int, query: str = "", page: int = 1, db: Sessio
         facets = f'[["project_type:{project_type}"]'
         if server.version:
             facets += f',["versions:{server.version}"]'
+        for loader in loaders:
+            facets += f',["categories:{loader}"]'
         facets += ']'
 
+        loaders_param = "[" + ",".join(f'"{l}"' for l in loaders) + "]"
         response = await client.get(
             f"{MODRINTH_API}/search",
-            params={"query": query, "facets": facets, "limit": 20, "offset": offset}
+            params={"query": query, "facets": facets, "loaders": loaders_param, "limit": 20, "offset": offset}
         )
         data = response.json()
         data["server_type"] = server.server_type
         data["project_type"] = project_type
         data["mc_version"] = server.version
+        data["loader"] = loaders[0]
         return data
 
 @router.get("/installed")

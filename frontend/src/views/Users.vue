@@ -84,8 +84,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, inject } from 'vue'
 import axios from 'axios'
+
+const toast = inject('toast', (opts) => alert(opts.title + (opts.message ? ': ' + opts.message : '')))
+const confirmFn = inject('confirm', (opts) => Promise.resolve(confirm(opts.title + '\n' + opts.message)))
 
 const users = ref([])
 const loading = ref(true)
@@ -123,26 +126,26 @@ async function saveUser() {
     showEdit.value = false
     await fetchUsers()
   } catch (e) {
-    alert(e.response?.data?.detail || 'Failed to update user')
+    toast({ title: 'Failed to update user', message: e.response?.data?.detail || '', type: 'error' })
   }
 }
 
 async function makeAdmin(userId) {
-  if (confirm('Make this user an admin?')) {
+  if (await confirmFn({ title: 'Make Admin', message: 'Make this user an admin?', type: 'info' })) {
     await axios.post(`/api/users/${userId}/make-admin`)
     await fetchUsers()
   }
 }
 
 async function removeAdmin(userId) {
-  if (confirm('Remove admin privileges from this user?')) {
+  if (await confirmFn({ title: 'Remove Admin', message: 'Remove admin privileges from this user?', type: 'warning' })) {
     await axios.post(`/api/users/${userId}/remove-admin`)
     await fetchUsers()
   }
 }
 
 async function deleteUser(userId, username) {
-  if (confirm(`Delete user "${username}" and all their servers?`)) {
+  if (await confirmFn({ title: 'Delete User', message: `Delete user "${username}" and all their servers?`, type: 'danger', confirmText: 'Delete' })) {
     await axios.delete(`/api/users/${userId}`)
     await fetchUsers()
   }

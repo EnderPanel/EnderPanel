@@ -75,21 +75,30 @@
         </div>
       </div>
     </nav>
+    <Toast ref="toastRef" />
     <router-view :key="$route.fullPath" />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, provide } from 'vue'
 import { useAuthStore } from './stores/auth'
 import { useThemeStore } from './stores/theme'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
+import Toast from './components/Toast.vue'
 
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
 const router = useRouter()
 const avatarInput = ref(null)
+const toastRef = ref(null)
+
+const toast = (options) => toastRef.value?.addToast(options)
+const confirm = (options) => toastRef.value?.showConfirm(options)
+
+provide('toast', toast)
+provide('confirm', confirm)
 
 onMounted(() => {
   themeStore.init()
@@ -133,7 +142,7 @@ async function uploadAvatar(event) {
     await axios.post('/api/user/avatar', formData)
     await refreshUser()
   } catch (e) {
-    alert(e.response?.data?.detail || 'Failed to upload avatar')
+    toast({ title: 'Failed to upload avatar', message: e.response?.data?.detail || '', type: 'error' })
   }
   event.target.value = ''
 }

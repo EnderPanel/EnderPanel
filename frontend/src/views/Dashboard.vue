@@ -194,13 +194,13 @@
 
             <div>
               <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Server Type</label>
-              <div class="grid grid-cols-5 gap-2">
+              <div class="flex gap-2">
                 <button v-for="type in serverTypes" :key="type.id" type="button" 
                   @click="selectServerType(type.id)"
                   :class="newServer.server_type === type.id 
                     ? 'bg-gradient-to-r from-mc-accent to-blue-500 text-white shadow-lg shadow-mc-accent/20' 
                     : 'bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white'"
-                  class="py-2.5 px-3 rounded-xl text-sm font-medium transition-all duration-200 border border-gray-200 dark:border-white/5">
+                  class="flex-1 py-2.5 px-3 rounded-xl text-sm font-medium transition-all duration-200 border border-gray-200 dark:border-white/5 whitespace-nowrap">
                   {{ type.name }}
                 </button>
               </div>
@@ -271,8 +271,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, inject } from 'vue'
 import axios from 'axios'
+
+const toast = inject('toast', (opts) => alert(opts.title + (opts.message ? ': ' + opts.message : '')))
+const confirmFn = inject('confirm', (opts) => Promise.resolve(confirm(opts.title + '\n' + opts.message)))
 
 const servers = ref([])
 const loading = ref(true)
@@ -407,6 +410,9 @@ async function createServer() {
   downloadStatus.value = 'downloading'
   try {
     const res = await axios.post('/api/servers/', newServer.value)
+    if (res.data.port_changed) {
+      toast({ title: `Port ${res.data.original_port} was in use`, message: `Server created on port ${res.data.port}.`, type: 'warning' })
+    }
     if (res.data.jar_downloaded) {
       downloadStatus.value = 'success'
     } else {
@@ -429,7 +435,7 @@ async function startServer(id) {
   try {
     await axios.post(`/api/servers/${id}/start`)
   } catch (e) {
-    alert(e.response?.data?.detail || 'Failed to start server')
+    toast({ title: 'Failed to start server', message: e.response?.data?.detail || '', type: 'error' })
   }
   await fetchServers()
 }
@@ -447,7 +453,7 @@ async function restartServer(id) {
   try {
     await axios.post(`/api/servers/${id}/restart`)
   } catch (e) {
-    alert(e.response?.data?.detail || 'Failed to restart server')
+    toast({ title: 'Failed to restart server', message: e.response?.data?.detail || '', type: 'error' })
   }
   await fetchServers()
 }
@@ -462,7 +468,7 @@ async function deleteServer() {
   try {
     await axios.delete(`/api/servers/${deletingServer.value.id}`)
   } catch (e) {
-    alert(e.response?.data?.detail || 'Failed to delete server')
+    toast({ title: 'Failed to delete server', message: e.response?.data?.detail || '', type: 'error' })
   }
   showDeleteConfirm.value = false
   deletingServer.value = null

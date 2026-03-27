@@ -51,7 +51,7 @@
     </div>
 
     <div class="glass rounded-2xl p-6">
-      <div class="tab-content" :key="activeTab">
+      <div class="tab-content">
       <div v-show="activeTab === 'console'">
         <div class="flex gap-2 mb-4">
           <button @click="startServer" :disabled="server?.status === 'running'" 
@@ -89,17 +89,24 @@
       </div>
 
       <div v-show="activeTab === 'files'">
-        <div class="flex items-center gap-2 mb-4 text-sm">
-          <button @click="navigateTo('')" class="text-mc-accent hover:underline flex items-center gap-1">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-2 text-sm">
+            <button @click="navigateTo('')" class="text-mc-accent hover:underline flex items-center gap-1">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+              </svg>
+              root
+            </button>
+            <span v-for="(part, i) in currentPath.split('/').filter(Boolean)" :key="i" class="flex items-center gap-2">
+              <span class="text-gray-600">/</span>
+              <button @click="navigateTo(currentPath.split('/').slice(0, i + 1).join('/'))" class="text-mc-accent hover:underline">{{ part }}</button>
+            </span>
+          </div>
+          <button @click="navigateTo(currentPath)" class="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
             </svg>
-            root
           </button>
-          <span v-for="(part, i) in currentPath.split('/').filter(Boolean)" :key="i" class="flex items-center gap-2">
-            <span class="text-gray-600">/</span>
-            <button @click="navigateTo(currentPath.split('/').slice(0, i + 1).join('/'))" class="text-mc-accent hover:underline">{{ part }}</button>
-          </span>
         </div>
         <div class="flex gap-2 mb-4">
           <button @click="showUpload = true" class="btn-primary text-sm py-2 flex items-center gap-2">
@@ -584,12 +591,14 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick, inject, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import axios from 'axios'
 
 const route = useRoute()
 const serverId = route.params.id
+const toast = inject('toast', (opts) => alert(opts.title + (opts.message ? ': ' + opts.message : '')))
+const confirmFn = inject('confirm', (opts) => Promise.resolve(confirm(opts.title + '\n' + opts.message)))
 const server = ref(null)
 const serverAvatarInput = ref(null)
 const activeTab = ref('console')
@@ -631,6 +640,12 @@ const nextBackupTime = ref('')
 let ws = null
 let reconnectTimeout = null
 
+watch(activeTab, (newTab) => {
+  if (newTab === 'files') {
+    navigateTo(currentPath.value)
+  }
+})
+
 const modLabel = computed(() => {
   const type = server.value?.server_type?.toLowerCase()
   if (type === 'paper' || type === 'spigot' || type === 'bukkit') return 'Plugins'
@@ -654,6 +669,17 @@ const tabs = computed(() => {
   )
   return list
 })
+
+function switchTab(tabId) {
+  activeTab.value = tabId
+  if (tabId === 'files') {
+    nextTick(() => navigateTo(currentPath.value))
+  } else if (tabId === 'backups') {
+    nextTick(() => fetchBackups())
+  } else if (tabId === 'players') {
+    nextTick(() => fetchPlayers())
+  }
+}
 
 function setPreset(min, max) {
   resources.ram_min = min
@@ -683,8 +709,9 @@ async function uploadServerAvatar(event) {
   try {
     const res = await axios.post(`/api/servers/${serverId}/avatar`, formData)
     server.value.avatar = res.data.url
+    toast({ type: 'success', title: 'Uploaded', message: 'Avatar updated' })
   } catch (e) {
-    alert(e.response?.data?.detail || 'Failed to upload avatar')
+    toast({ type: 'error', title: 'Upload Failed', message: e.response?.data?.detail || 'Failed to upload avatar' })
   }
   event.target.value = ''
 }
@@ -755,9 +782,10 @@ async function startServer() {
     await axios.post(`/api/servers/${serverId}/start`)
     await fetchServer()
     setTimeout(connectWebSocket, 500)
+    toast({ type: 'success', title: 'Started', message: 'Server starting...' })
   } catch (e) {
     const msg = e.response?.data?.detail || 'Failed to start server'
-    alert(msg)
+    toast({ type: 'error', title: 'Start Failed', message: msg })
     await fetchServer()
   }
 }
@@ -784,9 +812,10 @@ async function restartServer() {
     await new Promise(r => setTimeout(r, 200))
     await fetchServer()
     setTimeout(connectWebSocket, 500)
+    toast({ type: 'success', title: 'Restarted', message: 'Server restarting...' })
   } catch (e) {
     const msg = e.response?.data?.detail || 'Failed to restart server'
-    alert(msg)
+    toast({ type: 'error', title: 'Restart Failed', message: msg })
     await fetchServer()
   }
 }
@@ -803,11 +832,11 @@ function sendCommand() {
         ws.send(command.value)
         command.value = ''
       } else {
-        alert('Connecting to console...')
+        toast({ type: 'info', title: 'Console', message: 'Connecting to console...' })
       }
     }, 500)
   } else {
-    alert('Server is not running')
+    toast({ type: 'warning', title: 'Server Offline', message: 'Server is not running' })
   }
 }
 
@@ -817,11 +846,13 @@ async function navigateTo(path) {
     const res = await axios.get(`/api/servers/${serverId}/files/`, { 
       params: { path, _: Date.now() }
     })
+    console.log('Files response:', res.data)
     files.value = res.data.sort((a, b) => {
       if (a.is_dir && !b.is_dir) return 1
       if (!a.is_dir && b.is_dir) return -1
       return a.name.localeCompare(b.name)
     })
+    console.log('Files updated:', files.value)
   } catch (e) {
     console.error('Failed to fetch files:', e)
   }
@@ -834,7 +865,7 @@ async function editFile(path) {
     fileContent.value = res.data.content
     showEditor.value = true
   } catch (e) {
-    alert('Failed to read file')
+    toast({ type: 'error', title: 'Read Failed', message: 'Failed to read file' })
   }
 }
 
@@ -842,8 +873,9 @@ async function saveFile() {
   try {
     await axios.post(`/api/servers/${serverId}/files/write`, { path: editingFile.value, content: fileContent.value })
     showEditor.value = false
+    toast({ type: 'success', title: 'Saved', message: 'File saved successfully' })
   } catch (e) {
-    alert('Failed to save file')
+    toast({ type: 'error', title: 'Save Failed', message: 'Failed to save file' })
   }
 }
 
@@ -856,8 +888,9 @@ async function uploadFile() {
       showUpload.value = false
       uploadFileRef.value = null
       await navigateTo(currentPath.value)
+      toast({ type: 'success', title: 'Uploaded', message: 'File uploaded successfully' })
     } catch (e) {
-      alert('Failed to upload file')
+      toast({ type: 'error', title: 'Upload Failed', message: 'Failed to upload file' })
     }
   } else if (uploadMode.value === 'folder' && uploadFiles.value.length > 0) {
     try {
@@ -869,19 +902,22 @@ async function uploadFile() {
       showUpload.value = false
       uploadFiles.value = []
       await navigateTo(currentPath.value)
+      toast({ type: 'success', title: 'Uploaded', message: 'Folder uploaded successfully' })
     } catch (e) {
-      alert('Failed to upload folder')
+      toast({ type: 'error', title: 'Upload Failed', message: 'Failed to upload folder' })
     }
   }
 }
 
 async function deleteFile(path) {
-  if (confirm('Delete this file/folder?')) {
+  const ok = await confirmFn({ title: 'Delete', message: 'Delete this file/folder?', type: 'danger', confirmText: 'Delete' })
+  if (ok) {
     try {
       await axios.delete(`/api/servers/${serverId}/files/`, { params: { path } })
       await navigateTo(currentPath.value)
+      toast({ type: 'success', title: 'Deleted', message: 'File deleted' })
     } catch (e) {
-      alert('Failed to delete file')
+      toast({ type: 'error', title: 'Delete Failed', message: 'Failed to delete file' })
     }
   }
 }
@@ -893,8 +929,9 @@ async function createFolder() {
     try {
       await axios.post(`/api/servers/${serverId}/files/mkdir`, { path })
       await navigateTo(currentPath.value)
+      toast({ type: 'success', title: 'Created', message: `Folder "${name}" created` })
     } catch (e) {
-      alert('Failed to create folder')
+      toast({ type: 'error', title: 'Create Failed', message: 'Failed to create folder' })
     }
   }
 }
@@ -927,27 +964,6 @@ async function showVersions(plugin) {
   }
 }
 
-async function installPlugin(projectId) {
-  try {
-    const res = await axios.post(`/api/servers/${serverId}/mods/install/${projectId}`)
-    alert(`Installed ${res.data.filename} (${res.data.version})`)
-    await fetchInstalledPlugins()
-  } catch (e) {
-    alert(e.response?.data?.detail || 'Failed to install mod')
-  }
-}
-
-async function installSpecificVersion(versionId, versionNumber) {
-  try {
-    const res = await axios.post(`/api/servers/${serverId}/mods/install/${selectedPlugin.value.project_id}?version_id=${versionId}`)
-    alert(`Installed ${res.data.filename} (${res.data.version})`)
-    showVersionModal.value = false
-    await fetchInstalledPlugins()
-  } catch (e) {
-    alert(e.response?.data?.detail || 'Failed to install mod')
-  }
-}
-
 function formatNumber(num) {
   if (!num) return '0'
   if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
@@ -963,9 +979,10 @@ function formatDate(dateStr) {
 async function uninstallPlugin(filename) {
   try {
     await axios.delete(`/api/servers/${serverId}/mods/${filename}`)
+    toast({ type: 'success', title: 'Uninstalled', message: `${filename} removed` })
     await fetchInstalledPlugins()
   } catch (e) {
-    alert('Failed to uninstall mod')
+    toast({ type: 'error', title: 'Uninstall Failed', message: 'Failed to uninstall mod' })
   }
 }
 
@@ -1000,25 +1017,26 @@ function saveAutoUpdatePref() {
 async function updatePlugin(filename) {
   try {
     const res = await axios.post(`/api/servers/${serverId}/mods/update/${filename}`)
-    alert(`Updated ${res.data.project_title}: ${res.data.old_version} → ${res.data.new_version}`)
+    toast({ type: 'success', title: 'Updated', message: `${res.data.project_title}: ${res.data.old_version} → ${res.data.new_version}` })
     await fetchInstalledPlugins()
     await checkForUpdates()
   } catch (e) {
-    alert(e.response?.data?.detail || 'Failed to update')
+    toast({ type: 'error', title: 'Update Failed', message: e.response?.data?.detail || 'Failed to update' })
   }
 }
 
 async function updateAll() {
-  if (!confirm(`Update ${availableUpdates.value.length} plugins?`)) return
+  const ok = await confirmFn({ title: 'Update All', message: `Update ${availableUpdates.value.length} plugins?`, type: 'info', confirmText: 'Update All' })
+  if (!ok) return
   try {
     const res = await axios.post(`/api/servers/${serverId}/mods/updates/update-all`)
     const results = res.data.results
     const updated = results.filter(r => r.status === 'updated').length
-    alert(`Updated ${updated} of ${res.data.total} plugins`)
+    toast({ type: 'success', title: 'Updated', message: `${updated} of ${res.data.total} plugins updated` })
     await fetchInstalledPlugins()
     await checkForUpdates()
   } catch (e) {
-    alert(e.response?.data?.detail || 'Failed to update all')
+    toast({ type: 'error', title: 'Update Failed', message: e.response?.data?.detail || 'Failed to update all' })
   }
 }
 
@@ -1026,22 +1044,6 @@ function linkModrinthProjectPrompt(plugin) {
   linkingPlugin.value = plugin
   linkProjectId.value = ''
   showLinkModal.value = true
-}
-
-async function linkModrinthProject() {
-  if (!linkProjectId.value.trim()) return
-  
-  try {
-    const res = await axios.post(`/api/servers/${serverId}/mods/link/${linkingPlugin.value.name}?project_id=${linkProjectId.value.trim()}`)
-    alert(`Linked to ${res.data.project_title} (v${res.data.version})`)
-    showLinkModal.value = false
-    linkingPlugin.value = null
-    linkProjectId.value = ''
-    await fetchInstalledPlugins()
-    await checkForUpdates()
-  } catch (e) {
-    alert(e.response?.data?.detail || 'Failed to link project')
-  }
 }
 
 async function fetchSettings() {
@@ -1056,9 +1058,9 @@ async function fetchSettings() {
 async function saveSettings() {
   try {
     await axios.post(`/api/servers/${serverId}/settings/`, { settings: settings.value })
-    alert('Settings saved!')
+    toast({ type: 'success', title: 'Saved', message: 'Settings saved successfully' })
   } catch (e) {
-    alert('Failed to save settings')
+    toast({ type: 'error', title: 'Save Failed', message: 'Failed to save settings' })
   }
 }
 
@@ -1066,9 +1068,9 @@ async function saveResources() {
   try {
     await axios.put(`/api/servers/${serverId}/resources`, resources)
     await fetchServer()
-    alert('Resources updated!')
+    toast({ type: 'success', title: 'Updated', message: 'Resources updated successfully' })
   } catch (e) {
-    alert(e.response?.data?.detail || 'Failed to update resources')
+    toast({ type: 'error', title: 'Update Failed', message: e.response?.data?.detail || 'Failed to update resources' })
   }
 }
 
@@ -1086,33 +1088,36 @@ async function createBackup() {
   try {
     await axios.post(`/api/servers/${serverId}/files/backup`)
     await fetchBackups()
-    alert('Backup created!')
+    toast({ type: 'success', title: 'Backup Created', message: 'Backup created successfully' })
   } catch (e) {
-    alert(e.response?.data?.detail || 'Failed to create backup')
+    toast({ type: 'error', title: 'Backup Failed', message: e.response?.data?.detail || 'Failed to create backup' })
   } finally {
     backupLoading.value = false
   }
 }
 
 async function restoreBackup(filename) {
-  if (confirm(`Restore backup "${filename}"? This will replace all current files!`)) {
+  const ok = await confirmFn({ title: 'Restore Backup', message: `Restore "${filename}"? This will replace all current files!`, type: 'danger', confirmText: 'Restore' })
+  if (ok) {
     try {
       await axios.post(`/api/servers/${serverId}/files/restore/${filename}`)
       await navigateTo('')
-      alert('Backup restored!')
+      toast({ type: 'success', title: 'Restored', message: 'Backup restored successfully' })
     } catch (e) {
-      alert(e.response?.data?.detail || 'Failed to restore backup')
+      toast({ type: 'error', title: 'Restore Failed', message: e.response?.data?.detail || 'Failed to restore backup' })
     }
   }
 }
 
 async function deleteBackup(filename) {
-  if (confirm(`Delete backup "${filename}"?`)) {
+  const ok = await confirmFn({ title: 'Delete Backup', message: `Delete "${filename}"?`, type: 'danger', confirmText: 'Delete' })
+  if (ok) {
     try {
       await axios.delete(`/api/servers/${serverId}/files/backups/${filename}`)
+      toast({ type: 'success', title: 'Deleted', message: 'Backup deleted' })
       await fetchBackups()
     } catch (e) {
-      alert(e.response?.data?.detail || 'Failed to delete backup')
+      toast({ type: 'error', title: 'Delete Failed', message: e.response?.data?.detail || 'Failed to delete backup' })
     }
   }
 }
