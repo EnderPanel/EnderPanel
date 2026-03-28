@@ -976,6 +976,18 @@ function formatDate(dateStr) {
   return new Date(dateStr).toLocaleDateString()
 }
 
+async function installSpecificVersion(versionId, versionNumber) {
+  try {
+    toast({ type: 'info', title: 'Installing...', message: `Downloading version ${versionNumber}` })
+    await axios.post(`/api/servers/${serverId}/mods/install/${selectedPlugin.value.project_id}?version_id=${versionId}`)
+    toast({ type: 'success', title: 'Installed', message: `Version ${versionNumber} installed` })
+    showVersionModal.value = false
+    await fetchInstalledPlugins()
+  } catch (e) {
+    toast({ type: 'error', title: 'Install Failed', message: e.response?.data?.detail || 'Failed to install mod' })
+  }
+}
+
 async function uninstallPlugin(filename) {
   try {
     await axios.delete(`/api/servers/${serverId}/mods/${filename}`)

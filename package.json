@@ -3,9 +3,13 @@
   "version": "1.0.1",
   "private": true,
   "scripts": {
+    "prestart": "node scripts/kill-port.js 8000",
     "start": "cd backend && python3 main.py",
+    "predev": "node scripts/kill-port.js 8000 3000",
     "dev": "cd frontend && npm run dev",
     "build": "cd frontend && npm run build",
+    "app": "cd electron && npx electron .",
+    "app-build": "cd electron && npm run build",
     "install": "cd backend && pip install -r requirements.txt && cd ../frontend && npm install"
   }
 }

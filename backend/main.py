@@ -1,19 +1,61 @@
 import os
-from fastapi import FastAPI
+import re
+import html
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from database import engine, Base
 from routes import auth_router, servers_router, console_router, files_router, players_router, plugins_router, settings_router, users_router, avatars_router
 from config import SERVERS_DIR, BASE_DIR
 
 Base.metadata.create_all(bind=engine)
 
+limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
+
 app = FastAPI(title="EnderPanel")
+app.state.limiter = limiter
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded. Slow down."})
+
+INJECTION_PATTERNS = [
+    re.compile(r"(--|;|/\*|\*/|xp_|union\s+select|drop\s+table|insert\s+into|delete\s+from|update\s+.*set)", re.IGNORECASE),
+    re.compile(r"(<script|javascript:|on\w+\s*=)", re.IGNORECASE),
+    re.compile(r"(\.\./|\.\.\\)", re.IGNORECASE),
+]
+
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    path = request.url.path
+
+    # Block sensitive files
+    blocked_extensions = (".env", ".git", ".gitignore", ".py", ".pyc", ".db", ".sqlite", ".log", ".sh", ".ps1", ".json")
+    blocked_dirs = (".git/", ".github/", "__pycache__/", "node_modules/", "backend/", "servers/")
+    if not path.startswith("/api/"):
+        if any(path.endswith(ext) for ext in blocked_extensions) or any(d in path for d in blocked_dirs):
+            return JSONResponse(status_code=404, content={"detail": "Not found"})
+
+    # Check query params and path for injection patterns
+    if not path.startswith("/api/"):
+        check = f"{path}?{request.url.query}" if request.url.query else path
+        for pattern in INJECTION_PATTERNS:
+            if pattern.search(check):
+                return JSONResponse(status_code=400, content={"detail": "Blocked: suspicious input detected"})
+
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    return response
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:8000", "http://localhost:5173", "http://127.0.0.1:8000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -128,7 +128,12 @@ async function refreshUser() {
     const res = await axios.get('/api/auth/me')
     localStorage.setItem('user', JSON.stringify(res.data))
     authStore.user = res.data
-  } catch (e) {}
+  } catch (e) {
+    if (e.response?.status === 401) {
+      authStore.logout()
+      router.push('/login')
+    }
+  }
 }
 
 async function uploadAvatar(event) {
