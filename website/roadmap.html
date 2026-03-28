@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roadmap - EnderPanel</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', sans-serif; background: #0a0a14; color: #fff; min-height: 100vh; }
+    .bg { position: fixed; inset: 0; background: radial-gradient(ellipse at 20% 20%, rgba(168,85,247,0.12) 0%, transparent 50%), radial-gradient(ellipse at 80% 80%, rgba(236,72,153,0.08) 0%, transparent 50%); pointer-events: none; }
+    
+    nav { position: fixed; top: 0; width: 100%; padding: 1rem 2rem; background: rgba(10,10,20,0.8); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.05); z-index: 100; display: flex; justify-content: space-between; align-items: center; }
+    .logo { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; }
+    .logo-icon { width: 40px; height: 40px; background: linear-gradient(135deg, #a855f7, #ec4899, #a855f7); border-radius: 12px; position: relative; overflow: hidden; animation: float 3s ease-in-out infinite; }
+    .logo-icon::before { content: ''; position: absolute; inset: 4px; background: linear-gradient(135deg, #f9a8d4, #c084fc); border-radius: 8px; opacity: 0.8; }
+    .logo-icon::after { content: ''; position: absolute; width: 12px; height: 12px; background: white; border-radius: 50%; top: 8px; left: 8px; }
+    .logo-text { font-size: 1.5rem; font-weight: 700; background: linear-gradient(90deg, #a855f7, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .nav-links { display: flex; gap: 1.5rem; align-items: center; }
+    .nav-links a { color: #9ca3af; text-decoration: none; font-weight: 500; transition: color 0.2s; }
+    .nav-links a:hover { color: #fff; }
+
+    .container { max-width: 800px; margin: 0 auto; padding: 8rem 2rem 4rem; }
+    h1 { font-size: 2.5rem; font-weight: 800; margin-bottom: 0.5rem; background: linear-gradient(90deg, #a855f7, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .subtitle { color: #9ca3af; margin-bottom: 2rem; font-size: 1.1rem; }
+    
+    .edit-toggle { display: inline-flex; align-items: center; gap: 8px; padding: 0.5rem 1rem; background: rgba(168,85,247,0.1); border: 1px solid rgba(168,85,247,0.3); border-radius: 10px; color: #c084fc; font-size: 0.85rem; cursor: pointer; font-family: inherit; margin-bottom: 2rem; transition: all 0.2s; }
+    .edit-toggle:hover { background: rgba(168,85,247,0.2); }
+    .edit-toggle.active { background: rgba(168,85,247,0.25); border-color: rgba(168,85,247,0.5); }
+
+    .login-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); z-index: 200; align-items: center; justify-content: center; }
+    .login-modal.open { display: flex; }
+    .login-box { background: rgba(15,10,30,0.9); backdrop-filter: blur(24px); border: 1px solid rgba(168,85,247,0.25); border-radius: 20px; padding: 2rem; width: 90%; max-width: 380px; }
+    .login-box h3 { font-size: 1.2rem; margin-bottom: 1rem; background: linear-gradient(90deg, #a855f7, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .login-box input { width: 100%; padding: 0.75rem 1rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; color: white; font-size: 0.95rem; font-family: inherit; outline: none; margin-bottom: 1rem; }
+    .login-box input:focus { border-color: rgba(168,85,247,0.5); }
+    .login-box button { width: 100%; padding: 0.75rem; background: linear-gradient(135deg, #a855f7, #ec4899); border: none; border-radius: 10px; color: white; font-size: 0.95rem; font-weight: 600; cursor: pointer; font-family: inherit; transition: transform 0.2s; }
+    .login-box button:hover { transform: translateY(-1px); }
+    .login-error { color: #f87171; font-size: 0.8rem; margin-top: 0.5rem; display: none; }
+
+    .roadmap { display: flex; flex-direction: column; gap: 0.75rem; }
+    .item { display: flex; align-items: center; gap: 1rem; padding: 1rem 1.25rem; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 14px; transition: all 0.3s; }
+    .item:hover { background: rgba(255,255,255,0.05); border-color: rgba(168,85,247,0.2); }
+    
+    .status-icon { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .status-icon.done { background: rgba(34,197,94,0.15); color: #4ade80; }
+    .status-icon.in_progress { background: rgba(250,204,21,0.15); color: #facc15; }
+    .status-icon.planned { background: rgba(107,114,128,0.15); color: #9ca3af; }
+    
+    .item-text { flex: 1; font-size: 0.95rem; }
+    .item.done .item-text { color: #6b7280; }
+    
+    .badge { font-size: 0.7rem; padding: 0.2rem 0.6rem; border-radius: 6px; font-weight: 500; }
+    .badge.done { background: rgba(34,197,94,0.15); color: #4ade80; }
+    .badge.in_progress { background: rgba(250,204,21,0.15); color: #facc15; }
+    .badge.planned { background: rgba(107,114,128,0.15); color: #9ca3af; }
+
+    .edit-controls { display: none; gap: 6px; }
+    .edit-controls.show { display: flex; }
+    .edit-btn { width: 28px; height: 28px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: #9ca3af; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; transition: all 0.2s; }
+    .edit-btn:hover { background: rgba(255,255,255,0.1); color: white; }
+    .edit-btn.delete:hover { background: rgba(239,68,68,0.2); color: #f87171; border-color: rgba(239,68,68,0.3); }
+
+    .add-item { display: none; margin-top: 1rem; gap: 0.5rem; }
+    .add-item.show { display: flex; }
+    .add-item input { flex: 1; padding: 0.75rem 1rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; color: white; font-size: 0.9rem; font-family: inherit; outline: none; }
+    .add-item input:focus { border-color: rgba(168,85,247,0.5); }
+    .add-item select { padding: 0.75rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; color: white; font-size: 0.9rem; font-family: inherit; outline: none; }
+    .add-item button { padding: 0.75rem 1.5rem; background: linear-gradient(135deg, #a855f7, #ec4899); border: none; border-radius: 10px; color: white; font-weight: 600; cursor: pointer; font-family: inherit; }
+
+    .status-select { background: transparent; border: none; color: inherit; font-family: inherit; font-size: 0.8rem; cursor: pointer; outline: none; }
+
+    footer { text-align: center; padding: 3rem 2rem; color: #6b7280; }
+    footer a { color: #a855f7; text-decoration: none; }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+
+    @media (max-width: 640px) {
+      .container { padding: 6rem 1rem 2rem; }
+      h1 { font-size: 1.75rem; }
+      .item { padding: 0.875rem 1rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg"></div>
+
+  <nav>
+    <a href="index.html" class="logo">
+      <div class="logo-icon"></div>
+      <span class="logo-text">EnderPanel</span>
+    </a>
+    <div class="nav-links">
+      <a href="index.html#features">Features</a>
+      <a href="index.html">Download</a>
+      <a href="roadmap.html" style="color: #c084fc;">Roadmap</a>
+      <a href="https://discord.gg/TBdZyGh3eK" target="_blank" style="display: flex; align-items: center; gap: 6px;">
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+        Discord
+      </a>
+      <a href="#" id="support-nav-btn" style="color: #c084fc; display: flex; align-items: center; gap: 6px;">
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+        Support Me
+      </a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <h1>Roadmap</h1>
+    <p class="subtitle">What we're working on and what's coming next</p>
+    
+    <button class="edit-toggle" id="editBtn" onclick="toggleEdit()">
+      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+      Edit Roadmap
+    </button>
+
+    <div class="roadmap" id="roadmap"></div>
+
+    <div class="add-item" id="addItem">
+      <input type="text" id="newText" placeholder="New roadmap item..." />
+      <select id="newStatus">
+        <option value="planned">Planned</option>
+        <option value="in_progress">In Progress</option>
+        <option value="done">Done</option>
+      </select>
+      <button onclick="addItem()">Add</button>
+    </div>
+  </div>
+
+  <!-- Support Modal -->
+  <div class="login-modal" id="supportModal">
+    <div class="login-box" style="max-width: 440px; text-align: center;">
+      <div style="width: 56px; height: 56px; margin: 0 auto 1rem; background: linear-gradient(135deg, rgba(236,72,153,0.15), rgba(168,85,247,0.15)); border-radius: 14px; display: flex; align-items: center; justify-content: center;">
+        <svg width="28" height="28" fill="none" stroke="#ec4899" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+      </div>
+      <h3 style="margin-bottom: 0.75rem;">Support EnderPanel</h3>
+      <p style="color: #9ca3af; font-size: 0.9rem; line-height: 1.6; margin-bottom: 1.25rem;">Help me keep this website up and pay for my VPS</p>
+      <div class="code-block" style="text-align: left;">
+        <div class="code-block-header">
+          <span class="code-block-label">PayPal</span>
+          <button class="copy-btn" onclick="navigator.clipboard.writeText('thatmacosguy@outlook.com'); this.innerHTML='<svg width=&quot;11&quot; height=&quot;11&quot; viewBox=&quot;0 0 24 24&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;2&quot;><polyline points=&quot;20 6 9 17 4 12&quot;/></svg> Copied!'; setTimeout(()=>this.innerHTML='<svg width=&quot;11&quot; height=&quot;11&quot; viewBox=&quot;0 0 24 24&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;2&quot;><rect x=&quot;9&quot; y=&quot;9&quot; width=&quot;13&quot; height=&quot;13&quot; rx=&quot;2&quot;/><path d=&quot;M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1&quot;/></svg> Copy', 2000)">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            Copy
+          </button>
+        </div>
+        <pre><span style="color: #00d4aa;">thatmacosguy@outlook.com</span></pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="login-modal" id="loginModal">
+    <div class="login-box">
+      <h3>Enter Password</h3>
+      <input type="password" id="loginPassword" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()" />
+      <button onclick="doLogin()">Unlock</button>
+      <p class="login-error" id="loginError">Wrong password</p>
+    </div>
+  </div>
+
+  <footer>
+    <p>Made with 💜 by <a href="#">ThatMacOSGuy</a> & <a href="#">carit1</a></p>
+  </footer>
+
+  <script>
+    const PASSWORD = 'Olifant22!!!'
+    const STORAGE_KEY = 'ep_roadmap'
+    const DEFAULT_ITEMS = [
+      {id:1, text:'Forge & NeoForge server support', status:'done'},
+      {id:2, text:'Mod browser with Modrinth integration', status:'done'},
+      {id:3, text:'Auto-port assignment', status:'done'},
+      {id:4, text:'Server backups & restores', status:'in_progress'},
+      {id:5, text:'User permissions & roles', status:'in_progress'},
+      {id:6, text:'Schedule tasks (auto-restart, backup)', status:'planned'},
+      {id:7, text:'Plugin/mod version management', status:'planned'},
+      {id:8, text:'Multi-node support', status:'planned'}
+    ]
+
+    let editMode = false
+    let authenticated = false
+
+    function getItems() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [...DEFAULT_ITEMS] }
+      catch { return [...DEFAULT_ITEMS] }
+    }
+
+    function saveItems(items) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
+    }
+
+    function loadRoadmap() {
+      render(getItems())
+    }
+
+    function render(items) {
+      const el = document.getElementById('roadmap')
+      el.innerHTML = items.map(item => `
+        <div class="item ${item.status === 'done' ? 'done' : ''}">
+          <div class="status-icon ${item.status}">
+            ${item.status === 'done' ? '<svg width="14" height="14" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>' 
+              : item.status === 'in_progress' ? '<svg width="14" height="14" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg>'
+              : '<svg width="14" height="14" fill="currentColor" viewBox="0 0 20 20"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/></svg>'}
+          </div>
+          <span class="item-text">${item.text}</span>
+          <span class="badge ${item.status}">${item.status === 'in_progress' ? 'In Progress' : item.status === 'done' ? 'Done' : 'Planned'}</span>
+          <div class="edit-controls ${editMode ? 'show' : ''}">
+            <button class="edit-btn" onclick="moveItem(${item.id}, -1)" title="Move up">↑</button>
+            <button class="edit-btn" onclick="moveItem(${item.id}, 1)" title="Move down">↓</button>
+            <select class="status-select edit-btn" onchange="updateStatus(${item.id}, this.value)" style="width:auto;padding:0 4px;">
+              <option value="planned" ${item.status==='planned'?'selected':''}>Planned</option>
+              <option value="in_progress" ${item.status==='in_progress'?'selected':''}>In Progress</option>
+              <option value="done" ${item.status==='done'?'selected':''}>Done</option>
+            </select>
+            <button class="edit-btn delete" onclick="deleteItem(${item.id})">✕</button>
+          </div>
+        </div>
+      `).join('')
+    }
+
+    function toggleEdit() {
+      if (!editMode && !authenticated) {
+        document.getElementById('loginModal').classList.add('open')
+        document.getElementById('loginPassword').focus()
+        return
+      }
+      editMode = !editMode
+      document.getElementById('editBtn').classList.toggle('active', editMode)
+      document.getElementById('addItem').classList.toggle('show', editMode)
+      document.querySelectorAll('.edit-controls').forEach(el => el.classList.toggle('show', editMode))
+    }
+
+    function doLogin() {
+      const pw = document.getElementById('loginPassword').value
+      if (pw === PASSWORD) {
+        authenticated = true
+        document.getElementById('loginModal').classList.remove('open')
+        document.getElementById('loginError').style.display = 'none'
+        document.getElementById('loginPassword').value = ''
+        editMode = true
+        document.getElementById('editBtn').classList.add('active')
+        document.getElementById('addItem').classList.add('show')
+        document.querySelectorAll('.edit-controls').forEach(el => el.classList.add('show'))
+      } else {
+        document.getElementById('loginError').style.display = 'block'
+      }
+    }
+
+    function moveItem(id, dir) {
+      const items = getItems()
+      const idx = items.findIndex(i => i.id === id)
+      const newIdx = idx + dir
+      if (newIdx < 0 || newIdx >= items.length) return
+      [items[idx], items[newIdx]] = [items[newIdx], items[idx]]
+      saveItems(items)
+      render(items)
+    }
+
+    function deleteItem(id) {
+      const items = getItems().filter(i => i.id !== id)
+      saveItems(items)
+      render(items)
+    }
+
+    function addItem() {
+      const text = document.getElementById('newText').value.trim()
+      const status = document.getElementById('newStatus').value
+      if (!text) return
+      const items = getItems()
+      const newId = Math.max(0, ...items.map(i => i.id)) + 1
+      const order = { planned: 0, in_progress: 1, done: 2 }
+      let insertIdx = items.length
+      for (let i = items.length - 1; i >= 0; i--) {
+        if (order[items[i].status] <= order[status]) {
+          insertIdx = i + 1
+          break
+        }
+      }
+      items.splice(insertIdx, 0, {id: newId, text, status})
+      saveItems(items)
+      document.getElementById('newText').value = ''
+      render(items)
+    }
+
+    document.getElementById('loginModal').addEventListener('click', e => {
+      if (e.target === e.currentTarget) e.currentTarget.classList.remove('open')
+    })
+
+    const supportModal = document.getElementById('supportModal')
+    document.getElementById('support-nav-btn').addEventListener('click', e => {
+      e.preventDefault()
+      supportModal.classList.add('open')
+    })
+    supportModal.addEventListener('click', e => {
+      if (e.target === e.currentTarget) e.currentTarget.classList.remove('open')
+    })
+
+    loadRoadmap()
+  </script>
+</body>
+</html>
