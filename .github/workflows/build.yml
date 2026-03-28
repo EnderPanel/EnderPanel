@@ -6,61 +6,81 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  build:
-    strategy:
-      matrix:
-        include:
-          - os: macos-latest
-            platform: mac
-          - os: windows-latest
-            platform: win
-          - os: ubuntu-latest
-            platform: linux
-
-    runs-on: ${{ matrix.os }}
-
+  build-mac:
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - name: Install dependencies
+      - run: npm install
         working-directory: electron
-        run: npm install
-
-      - name: Build app
+      - run: npm run build:mac
         working-directory: electron
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: npm run build:${{ matrix.platform }}
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: enderpanel-${{ matrix.platform }}
+          name: enderpanel-mac
           path: |
             electron/dist/*.dmg
             electron/dist/*.zip
+          if-no-files-found: ignore
+
+  build-win:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+        working-directory: electron
+      - run: npm run build:win
+        working-directory: electron
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - uses: actions/upload-artifact@v4
+        with:
+          name: enderpanel-win
+          path: |
             electron/dist/*.exe
+            electron/dist/*.zip
+          if-no-files-found: ignore
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+        working-directory: electron
+      - run: npm run build:linux
+        working-directory: electron
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - uses: actions/upload-artifact@v4
+        with:
+          name: enderpanel-linux
+          path: |
             electron/dist/*.AppImage
-            electron/dist/*.deb
           if-no-files-found: ignore
 
   release:
-    needs: build
+    needs: [build-mac, build-win, build-linux]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
-
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-
-      - name: Create release
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
           files: artifacts/**/*
           generate_release_notes: true
