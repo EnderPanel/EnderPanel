@@ -24,26 +24,29 @@ function loadSetup() {
 function injectBar() {
   if (!win) return
   const dark = nativeTheme.shouldUseDarkColors
-  const css = dark
-    ? 'background:rgba(10,10,20,0.75);border-bottom:1px solid rgba(255,255,255,0.06);color:rgba(255,255,255,0.4);'
-    : 'background:rgba(245,245,245,0.75);border-bottom:1px solid rgba(0,0,0,0.08);color:rgba(0,0,0,0.4);'
-  const btnStyle = dark
-    ? 'background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.5);'
-    : 'background:rgba(0,0,0,0.05);border:1px solid rgba(0,0,0,0.1);color:rgba(0,0,0,0.5);'
 
   win.webContents.executeJavaScript(`
     (function(){
-      var e=document.getElementById('ep-bar');
-      if(e){e.remove();document.body.style.paddingTop='0'}
+      var old=document.getElementById('ep-bar');
+      if(old){old.remove();document.body.style.paddingTop='0'}
       var s=document.createElement('style');
-      s.textContent='#ep-bar{position:fixed;top:0;left:0;right:0;z-index:999999;height:26px;${css}backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);display:flex;align-items:center;justify-content:space-between;padding:0 10px;font:500 10px/1 Inter,-apple-system,sans-serif;-webkit-app-region:drag}#ep-bar span{user-select:none;opacity:0.7}#ep-bar button{-webkit-app-region:no-drag;${btnStyle}border-radius:4px;padding:1px 8px;font:inherit;font-size:10px;cursor:pointer;transition:opacity .15s}#ep-bar button:hover{opacity:0.8}';
+      s.textContent=\`
+        #ep-bar{position:fixed;top:0;left:0;right:0;z-index:999999;height:30px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:12px;-webkit-app-region:drag;\${${dark}?'background:rgba(25,25,30,0.85);border-bottom:1px solid rgba(255,255,255,0.05);color:rgba(255,255,255,0.5);':'background:rgba(240,240,240,0.85);border-bottom:1px solid rgba(0,0,0,0.08);color:rgba(0,0,0,0.5);'}backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+        #ep-bar .ep-logo{display:flex;align-items:center;gap:6px;opacity:0.6}
+        #ep-bar .ep-logo-dot{width:6px;height:6px;border-radius:50%;background:linear-gradient(135deg,#a855f7,#ec4899)}
+        #ep-bar .ep-btn{-webkit-app-region:no-drag;\${${dark}?'background:transparent;color:rgba(255,255,255,0.45);border:1px solid rgba(255,255,255,0.08);':'background:transparent;color:rgba(0,0,0,0.45);border:1px solid rgba(0,0,0,0.1);'}border-radius:4px;padding:2px 10px;font:inherit;font-size:11px;cursor:pointer;transition:all 0.15s;line-height:1.4}
+        #ep-bar .ep-btn:hover{\${${dark}?'background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);':'background:rgba(0,0,0,0.06);color:rgba(0,0,0,0.7);'}}
+      \`;
       document.head.appendChild(s);
       var b=document.createElement('div');b.id='ep-bar';
-      var t=document.createElement('span');t.textContent='EnderPanel';
-      var c=document.createElement('button');c.textContent='Change Server';
-      c.onclick=function(){if(confirm('Change server?'))window.__ep.reset()};
-      b.appendChild(t);b.appendChild(c);document.body.appendChild(b);
-      document.body.style.paddingTop='26px';
+      var logo=document.createElement('div');logo.className='ep-logo';
+      var dot=document.createElement('div');dot.className='ep-logo-dot';
+      var name=document.createElement('span');name.textContent='EnderPanel';
+      logo.appendChild(dot);logo.appendChild(name);
+      var btn=document.createElement('button');btn.className='ep-btn';btn.textContent='Change Server';
+      btn.onclick=function(){if(confirm('Change server address?'))window.__ep.reset()};
+      b.appendChild(logo);b.appendChild(btn);document.body.appendChild(b);
+      document.body.style.paddingTop='30px';
     })();`).catch(function(){})
 }
 
@@ -60,10 +63,11 @@ ipcMain.handle('reset-config', () => {
 function createWindow() {
   win = new BrowserWindow({
     width: 1200, height: 800,
-    show: true,
+    show: false,
     center: true,
     title: 'EnderPanel',
     icon: path.join(__dirname, 'icon.png'),
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
