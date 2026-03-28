@@ -15,16 +15,6 @@ function saveConfig(config) {
 
 let win
 
-ipcMain.handle('save-config', (_, data) => {
-  saveConfig(data)
-  win.loadURL(data.serverUrl)
-})
-
-ipcMain.handle('reset-config', () => {
-  try { fs.unlinkSync(configPath) } catch {}
-  loadSetup()
-})
-
 function loadSetup() {
   if (!win) return
   win.loadFile(path.join(__dirname, 'setup.html'))
@@ -41,7 +31,7 @@ function injectBar() {
     ? 'background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.5);'
     : 'background:rgba(0,0,0,0.05);border:1px solid rgba(0,0,0,0.1);color:rgba(0,0,0,0.5);'
 
-  const js = `
+  win.webContents.executeJavaScript(`
     (function(){
       var e=document.getElementById('ep-bar');
       if(e){e.remove();document.body.style.paddingTop='0'}
@@ -54,29 +44,25 @@ function injectBar() {
       c.onclick=function(){if(confirm('Change server?'))window.__ep.reset()};
       b.appendChild(t);b.appendChild(c);document.body.appendChild(b);
       document.body.style.paddingTop='26px';
-    })();`
-
-  win.webContents.executeJavaScript(js).catch(function(){})
+    })();`).catch(function(){})
 }
 
+ipcMain.handle('save-config', (_, data) => {
+  saveConfig(data)
+  if (win) win.loadURL(data.serverUrl)
+})
+
+ipcMain.handle('reset-config', () => {
+  try { fs.unlinkSync(configPath) } catch {}
+  loadSetup()
+})
+
 function createWindow() {
-  const config = getConfig()
-
-  ipcMain.removeAllListeners('save-config')
-  ipcMain.removeAllListeners('reset-config')
-
-  ipcMain.handle('save-config', (_, data) => {
-    saveConfig(data)
-    win.loadURL(data.serverUrl)
-  })
-
-  ipcMain.handle('reset-config', () => {
-    try { fs.unlinkSync(configPath) } catch {}
-    loadSetup()
-  })
-
   win = new BrowserWindow({
-    width: 1200, height: 800, center: true, title: 'EnderPanel',
+    width: 1200, height: 800,
+    show: true,
+    center: true,
+    title: 'EnderPanel',
     icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -92,14 +78,21 @@ function createWindow() {
     cb({ responseHeaders: h })
   })
 
+  win.webContents.on('did-finish-load', () => setTimeout(injectBar, 500))
+  win.webContents.on('did-navigate', () => setTimeout(injectBar, 500))
+  win.webContents.on('did-navigate-in-page', () => setTimeout(injectBar, 500))
+
+  const config = getConfig()
   if (config && config.serverUrl) {
     win.loadURL(config.serverUrl)
-    win.webContents.on('did-finish-load', () => setTimeout(injectBar, 500))
-    win.webContents.on('did-navigate', () => setTimeout(injectBar, 500))
-    win.webContents.on('did-navigate-in-page', () => setTimeout(injectBar, 500))
   } else {
     loadSetup()
   }
+
+  win.once('ready-to-show', () => {
+    win.show()
+    win.focus()
+  })
 
   if (process.platform === 'darwin') {
     Menu.setApplicationMenu(Menu.buildFromTemplate([
