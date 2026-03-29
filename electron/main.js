@@ -3,6 +3,7 @@ const path = require('path')
 const fs = require('fs')
 
 const configPath = path.join(app.getPath('userData'), 'enderpanel.json')
+const isMac = process.platform === 'darwin'
 
 function getConfig() {
   try { return JSON.parse(fs.readFileSync(configPath, 'utf8')) }
@@ -18,12 +19,15 @@ let win
 function loadSetup() {
   if (!win) return
   win.loadFile(path.join(__dirname, 'setup.html'))
-  if (process.platform === 'darwin') Menu.setApplicationMenu(Menu.buildFromTemplate([]))
+  if (isMac) Menu.setApplicationMenu(Menu.buildFromTemplate([]))
 }
 
 function injectBar() {
   if (!win) return
   const dark = nativeTheme.shouldUseDarkColors
+  const barHeight = isMac ? 38 : 28
+  const barTop = isMac ? 0 : 0
+  const padding = isMac ? 'padding-left:76px;' : ''
 
   win.webContents.executeJavaScript(`
     (function(){
@@ -31,7 +35,7 @@ function injectBar() {
       if(old){old.remove();document.body.style.paddingTop='0'}
       var s=document.createElement('style');
       s.textContent=\`
-        #ep-bar{position:fixed;top:0;left:0;right:0;z-index:999999;height:30px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:12px;-webkit-app-region:drag;\${${dark}?'background:rgba(25,25,30,0.85);border-bottom:1px solid rgba(255,255,255,0.05);color:rgba(255,255,255,0.5);':'background:rgba(240,240,240,0.85);border-bottom:1px solid rgba(0,0,0,0.08);color:rgba(0,0,0,0.5);'}backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+        #ep-bar{position:fixed;top:0;left:0;right:0;z-index:999999;height:${barHeight}px;display:flex;align-items:center;justify-content:space-between;${padding}padding-right:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:12px;-webkit-app-region:drag;\${${dark}?'background:rgba(25,25,30,0.85);border-bottom:1px solid rgba(255,255,255,0.05);color:rgba(255,255,255,0.5);':'background:rgba(240,240,240,0.85);border-bottom:1px solid rgba(0,0,0,0.08);color:rgba(0,0,0,0.5);'}backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
         #ep-bar .ep-logo{display:flex;align-items:center;gap:6px;opacity:0.6}
         #ep-bar .ep-logo-dot{width:6px;height:6px;border-radius:50%;background:linear-gradient(135deg,#a855f7,#ec4899)}
         #ep-bar .ep-btn{-webkit-app-region:no-drag;\${${dark}?'background:transparent;color:rgba(255,255,255,0.45);border:1px solid rgba(255,255,255,0.08);':'background:transparent;color:rgba(0,0,0,0.45);border:1px solid rgba(0,0,0,0.1);'}border-radius:4px;padding:2px 10px;font:inherit;font-size:11px;cursor:pointer;transition:all 0.15s;line-height:1.4}
@@ -46,7 +50,7 @@ function injectBar() {
       var btn=document.createElement('button');btn.className='ep-btn';btn.textContent='Change Server';
       btn.onclick=function(){if(confirm('Change server address?'))window.__ep.reset()};
       b.appendChild(logo);b.appendChild(btn);document.body.appendChild(b);
-      document.body.style.paddingTop='30px';
+      document.body.style.paddingTop='${barHeight}px';
     })();`).catch(function(){})
 }
 
@@ -67,7 +71,7 @@ function createWindow() {
     center: true,
     title: 'EnderPanel',
     icon: path.join(__dirname, 'icon.png'),
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    titleBarStyle: isMac ? 'hiddenInset' : 'default',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -98,7 +102,7 @@ function createWindow() {
     win.focus()
   })
 
-  if (process.platform === 'darwin') {
+  if (isMac) {
     Menu.setApplicationMenu(Menu.buildFromTemplate([
       { label: 'EnderPanel', submenu: [
         { label: 'Change Server', accelerator: 'CommandOrControl+Shift+L', click: () => {
