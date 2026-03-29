@@ -7,9 +7,10 @@ Write-Host ""
 # Check admin
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    Write-Host "Restarting as administrator..." -ForegroundColor Yellow
-    Start-Process powershell.exe "-ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
-    exit
+    Write-Host "Please run PowerShell as Administrator and try again." -ForegroundColor Red
+    Write-Host "Right-click PowerShell -> Run as Administrator" -ForegroundColor Yellow
+    Read-Host "Press Enter to exit"
+    exit 1
 }
 
 $ErrorActionPreference = "Stop"
