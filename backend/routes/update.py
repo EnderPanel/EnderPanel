@@ -1,7 +1,7 @@
 import os
 import shutil
+import tempfile
 import httpx
-import asyncio
 import tarfile
 from fastapi import APIRouter, Depends, HTTPException
 from models.user import User
@@ -9,8 +9,8 @@ from utils.security import get_current_user
 
 router = APIRouter(prefix="/api/update", tags=["update"])
 
-BASE_DIR = os.path.dirname(os.path.dirname(__file__))
-VERSION_FILE = os.path.join(BASE_DIR, "..", "VERSION")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+VERSION_FILE = os.path.join(BASE_DIR, "VERSION")
 LATEST_URL = "https://enderpanel.space/latest.txt"
 DOWNLOAD_URL = "https://enderpanel.space/releases/enderpanel-{}.tar.gz"
 
@@ -27,11 +27,7 @@ async def check_update():
             r = await c.get(LATEST_URL)
             latest = r.text.strip()
             current = get_current_version()
-            return {
-                "current": current,
-                "latest": latest,
-                "update_available": latest != current
-            }
+            return {"current": current, "latest": latest, "update_available": latest != current}
     except:
         return {"current": get_current_version(), "latest": "unknown", "update_available": False}
 
@@ -49,30 +45,26 @@ async def install_update(current_user: User = Depends(get_current_user)):
             if r.status_code != 200:
                 raise HTTPException(500, "Failed to download update")
 
-            tmp_tar = os.path.join(BASE_DIR, "..", "_update.tar.gz")
-            with open(tmp_tar, "wb") as f:
-                f.write(r.content)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                tmp_tar = os.path.join(tmpdir, "update.tar.gz")
+                with open(tmp_tar, "wb") as f:
+                    f.write(r.content)
 
-            tmp_extract = os.path.join(BASE_DIR, "..", "_update_tmp")
-            if os.path.exists(tmp_extract):
-                shutil.rmtree(tmp_extract)
-            os.makedirs(tmp_extract)
+                extract_dir = os.path.join(tmpdir, "extract")
+                os.makedirs(extract_dir)
 
-            with tarfile.open(tmp_tar, "r:gz") as tar:
-                tar.extractall(tmp_extract)
+                with tarfile.open(tmp_tar, "r:gz") as tar:
+                    tar.extractall(extract_dir)
 
-            for item in os.listdir(tmp_extract):
-                src = os.path.join(tmp_extract, item)
-                dst = os.path.join(BASE_DIR, "..", item)
-                if os.path.isdir(src):
-                    if os.path.exists(dst):
-                        shutil.rmtree(dst)
-                    shutil.copytree(src, dst)
-                else:
-                    shutil.copy2(src, dst)
-
-            os.remove(tmp_tar)
-            shutil.rmtree(tmp_extract)
+                for item in os.listdir(extract_dir):
+                    src = os.path.join(extract_dir, item)
+                    dst = os.path.join(BASE_DIR, item)
+                    if os.path.isdir(src):
+                        if os.path.exists(dst):
+                            shutil.rmtree(dst)
+                        shutil.copytree(src, dst)
+                    else:
+                        shutil.copy2(src, dst)
 
             with open(VERSION_FILE, "w") as f:
                 f.write(latest)
