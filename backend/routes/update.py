@@ -56,13 +56,18 @@ async def install_update(current_user: User = Depends(get_current_user)):
                 with tarfile.open(tmp_tar, "r:gz") as tar:
                     tar.extractall(extract_dir)
 
+                # Copy new files first, then replace
                 for item in os.listdir(extract_dir):
                     src = os.path.join(extract_dir, item)
                     dst = os.path.join(BASE_DIR, item)
+                    tmp_dst = dst + ".new"
                     if os.path.isdir(src):
+                        if os.path.exists(tmp_dst):
+                            shutil.rmtree(tmp_dst)
+                        shutil.copytree(src, tmp_dst)
                         if os.path.exists(dst):
                             shutil.rmtree(dst)
-                        shutil.copytree(src, dst)
+                        os.rename(tmp_dst, dst)
                     else:
                         shutil.copy2(src, dst)
 
