@@ -20,7 +20,7 @@
                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5'">
               Servers
             </router-link>
-            <router-link to="/users" 
+            <router-link v-if="isAdmin" to="/users" 
               class="px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200"
               :class="$route.path === '/users' 
                 ? 'text-gray-900 dark:text-white bg-gray-200 dark:bg-white/10' 

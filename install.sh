@@ -161,6 +161,28 @@ if ! docker info &> /dev/null; then
     exit 1
 fi
 
+# Download EnderPanel
+echo ""
+echo "Downloading EnderPanel..."
+INSTALL_DIR="$HOME/EnderPanel"
+mkdir -p "$INSTALL_DIR"
+cd "$INSTALL_DIR"
+
+if command -v git &> /dev/null; then
+    if [ -d ".git" ]; then
+        git pull
+    else
+        git clone https://github.com/EnderPanel/EnderPanel.git .
+    fi
+else
+    echo "Downloading release..."
+    curl -sL "https://enderpanel.space/releases/latest.tar.gz" -o /tmp/enderpanel.tar.gz
+    tar -xzf /tmp/enderpanel.tar.gz -C "$INSTALL_DIR"
+    rm /tmp/enderpanel.tar.gz
+fi
+
+echo "Downloaded to $INSTALL_DIR"
+
 # Install backend dependencies
 echo ""
 echo "Installing backend dependencies..."

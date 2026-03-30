@@ -71,34 +71,6 @@
         </table>
       </div>
     </div>
-
-    <!-- Users -->
-    <div class="card">
-      <h3 class="font-semibold mb-4">Users</h3>
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-white/10">
-              <th class="pb-2 pr-4">ID</th>
-              <th class="pb-2 pr-4">Username</th>
-              <th class="pb-2 pr-4">Email</th>
-              <th class="pb-2">Role</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="user in stats.users" :key="user.id" class="border-b border-gray-100 dark:border-white/5">
-              <td class="py-2.5 pr-4">{{ user.id }}</td>
-              <td class="py-2.5 pr-4 font-medium">{{ user.username }}</td>
-              <td class="py-2.5 pr-4 text-gray-500">{{ user.email }}</td>
-              <td class="py-2.5">
-                <span v-if="user.is_admin" class="px-2 py-0.5 rounded text-xs font-medium bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">Admin</span>
-                <span v-else class="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-white/5 text-gray-500">User</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
   </div>
 </template>
 
