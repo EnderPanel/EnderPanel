@@ -2,6 +2,18 @@
   <div class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
     <h1 class="text-2xl font-bold mb-6">Admin Dashboard</h1>
 
+    <!-- Update -->
+    <div v-if="updateInfo.update_available" class="card mb-8 flex items-center justify-between" style="border-color: rgba(168,85,247,0.3); background: rgba(168,85,247,0.05);">
+      <div>
+        <p class="font-semibold">Update Available</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400">v{{ updateInfo.current }} → v{{ updateInfo.latest }}</p>
+      </div>
+      <button @click="installUpdate" :disabled="updating"
+        class="px-4 py-2 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-mc-accent to-mc-purple hover:opacity-90 transition disabled:opacity-50">
+        {{ updating ? 'Updating...' : 'Update Now' }}
+      </button>
+    </div>
+
     <!-- Stats Cards -->
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
       <div class="card">
@@ -79,6 +91,8 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import axios from 'axios'
 
 const stats = ref({})
+const updateInfo = ref({})
+const updating = ref(false)
 let interval
 
 async function fetchStats() {
@@ -86,6 +100,26 @@ async function fetchStats() {
     const res = await axios.get('/api/admin/stats')
     stats.value = res.data
   } catch (e) {}
+}
+
+async function checkUpdate() {
+  try {
+    const res = await axios.get('/api/update/check')
+    updateInfo.value = res.data
+  } catch (e) {}
+}
+
+async function installUpdate() {
+  updating.value = true
+  try {
+    await axios.post('/api/update/install')
+    alert('Updated! Please restart the panel.')
+    location.reload()
+  } catch (e) {
+    alert('Update failed: ' + (e.response?.data?.detail || 'Unknown error'))
+  } finally {
+    updating.value = false
+  }
 }
 
 function formatBytes(bytes) {
