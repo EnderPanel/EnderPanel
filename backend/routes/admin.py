@@ -61,7 +61,7 @@ def get_stats(db: Session = Depends(get_db), _: User = Depends(admin_only)):
     cpu_percent = psutil.cpu_percent(interval=0.5)
     memory = psutil.virtual_memory()
     mem_used = memory.total - memory.available
-    mem_percent = round((mem_used / memory.total) * 100, 1)
+    mem_percent = round(100 - (memory.available / memory.total) * 100, 1)
     disk = psutil.disk_usage("/")
 
     try:
