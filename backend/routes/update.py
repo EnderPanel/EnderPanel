@@ -56,18 +56,38 @@ async def install_update(current_user: User = Depends(get_current_user)):
                 with tarfile.open(tmp_tar, "r:gz") as tar:
                     tar.extractall(extract_dir)
 
-                # Copy new files first, then replace
+                # Files/dirs to preserve (user data)
+                skip_dirs = {"servers", "avatars", "__pycache__"}
+                skip_files = {"mcpanel.db"}
+
+                def copytree_skip(src, dst):
+                    """Copy directory, skipping user data."""
+                    os.makedirs(dst, exist_ok=True)
+                    for item in os.listdir(src):
+                        s = os.path.join(src, item)
+                        d = os.path.join(dst, item)
+                        if item in skip_files:
+                            continue
+                        if item in skip_dirs:
+                            continue
+                        if os.path.isdir(s):
+                            copytree_skip(s, d)
+                        else:
+                            shutil.copy2(s, d)
+
+                # Copy new files, preserving user data
                 for item in os.listdir(extract_dir):
                     src = os.path.join(extract_dir, item)
                     dst = os.path.join(BASE_DIR, item)
-                    tmp_dst = dst + ".new"
+                    if item in skip_files:
+                        continue
+                    if item in skip_dirs:
+                        continue
                     if os.path.isdir(src):
-                        if os.path.exists(tmp_dst):
-                            shutil.rmtree(tmp_dst)
-                        shutil.copytree(src, tmp_dst)
                         if os.path.exists(dst):
-                            shutil.rmtree(dst)
-                        os.rename(tmp_dst, dst)
+                            copytree_skip(src, dst)
+                        else:
+                            shutil.copytree(src, dst)
                     else:
                         shutil.copy2(src, dst)
 
