@@ -34,26 +34,48 @@
       </div>
     </div>
 
-    <!-- System Resources -->
+    <!-- Usage Graphs -->
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
       <div class="card">
-        <h3 class="font-semibold mb-3">Memory</h3>
-        <div class="h-3 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
-          <div class="h-full bg-gradient-to-r from-mc-accent to-mc-purple rounded-full transition-all" :style="{width: (stats.system?.memory_percent || 0) + '%'}"></div>
+        <div class="flex justify-between items-center mb-3">
+          <h3 class="font-semibold">CPU Usage</h3>
+          <span class="text-sm text-gray-500">{{ stats.system?.cpu_percent || 0 }}%</span>
         </div>
-        <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">{{ formatBytes(stats.system?.memory_used) }} / {{ formatBytes(stats.system?.memory_total) }} ({{ stats.system?.memory_percent || 0 }}%)</p>
+        <canvas ref="cpuCanvas" height="80" class="w-full rounded-lg"></canvas>
       </div>
       <div class="card">
-        <h3 class="font-semibold mb-3">Disk</h3>
-        <div class="h-3 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
+        <div class="flex justify-between items-center mb-3">
+          <h3 class="font-semibold">Memory Usage</h3>
+          <span class="text-sm text-gray-500">{{ stats.system?.memory_percent || 0 }}%</span>
+        </div>
+        <canvas ref="memCanvas" height="80" class="w-full rounded-lg"></canvas>
+      </div>
+    </div>
+
+    <!-- Bars -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+      <div class="card">
+        <div class="flex justify-between items-center mb-2">
+          <span class="text-sm text-gray-500 dark:text-gray-400">Memory</span>
+          <span class="text-sm font-medium">{{ formatBytes(stats.system?.memory_used) }} / {{ formatBytes(stats.system?.memory_total) }}</span>
+        </div>
+        <div class="h-2 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
+          <div class="h-full bg-gradient-to-r from-mc-accent to-mc-purple rounded-full transition-all" :style="{width: (stats.system?.memory_percent || 0) + '%'}"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="flex justify-between items-center mb-2">
+          <span class="text-sm text-gray-500 dark:text-gray-400">Disk</span>
+          <span class="text-sm font-medium">{{ formatBytes(stats.system?.disk_used) }} / {{ formatBytes(stats.system?.disk_total) }}</span>
+        </div>
+        <div class="h-2 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
           <div class="h-full bg-gradient-to-r from-mc-accent to-mc-purple rounded-full transition-all" :style="{width: (stats.system?.disk_percent || 0) + '%'}"></div>
         </div>
-        <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">{{ formatBytes(stats.system?.disk_used) }} / {{ formatBytes(stats.system?.disk_total) }} ({{ stats.system?.disk_percent || 0 }}%)</p>
       </div>
     </div>
 
     <!-- All Servers -->
-    <div class="card mb-8">
+    <div class="card">
       <h3 class="font-semibold mb-4">All Servers</h3>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
@@ -87,18 +109,69 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import axios from 'axios'
 
 const stats = ref({})
 const updateInfo = ref({})
 const updating = ref(false)
+const cpuCanvas = ref(null)
+const memCanvas = ref(null)
 let interval
+
+function drawGraph(canvas, data, color) {
+  if (!canvas || !data || data.length < 2) return
+  const ctx = canvas.getContext('2d')
+  const w = canvas.width = canvas.offsetWidth * 2
+  const h = canvas.height = 160
+  ctx.clearRect(0, 0, w, h)
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)'
+  ctx.lineWidth = 1
+  for (let i = 0; i <= 4; i++) {
+    const y = (h / 4) * i
+    ctx.beginPath()
+    ctx.moveTo(0, y)
+    ctx.lineTo(w, y)
+    ctx.stroke()
+  }
+
+  // Line
+  const step = w / (data.length - 1)
+  ctx.beginPath()
+  ctx.strokeStyle = color
+  ctx.lineWidth = 2
+  ctx.lineJoin = 'round'
+
+  data.forEach((v, i) => {
+    const x = i * step
+    const y = h - (v / 100) * h
+    if (i === 0) ctx.moveTo(x, y)
+    else ctx.lineTo(x, y)
+  })
+  ctx.stroke()
+
+  // Fill
+  ctx.lineTo(w, h)
+  ctx.lineTo(0, h)
+  ctx.closePath()
+  const grad = ctx.createLinearGradient(0, 0, 0, h)
+  grad.addColorStop(0, color.replace(')', ',0.3)').replace('rgb', 'rgba'))
+  grad.addColorStop(1, color.replace(')', ',0)').replace('rgb', 'rgba'))
+  ctx.fillStyle = grad
+  ctx.fill()
+}
 
 async function fetchStats() {
   try {
     const res = await axios.get('/api/admin/stats')
     stats.value = res.data
+    await nextTick()
+    if (res.data.history) {
+      drawGraph(cpuCanvas.value, res.data.history.cpu, 'rgb(168,85,247)')
+      drawGraph(memCanvas.value, res.data.history.memory, 'rgb(236,72,153)')
+    }
   } catch (e) {}
 }
 
@@ -138,7 +211,8 @@ function statusClass(status) {
 
 onMounted(() => {
   fetchStats()
-  interval = setInterval(fetchStats, 10000)
+  checkUpdate()
+  interval = setInterval(fetchStats, 15000)
 })
 
 onUnmounted(() => clearInterval(interval))
@@ -147,5 +221,8 @@ onUnmounted(() => clearInterval(interval))
 <style scoped>
 .card {
   @apply bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl p-4;
+}
+canvas {
+  image-rendering: auto;
 }
 </style>
