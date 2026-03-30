@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-white transition-colors duration-300">
+  <div v-if="!loading" class="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-white transition-colors duration-300">
     <nav v-if="authStore.user" class="glass sticky top-0 z-40 px-6 py-3 animate-fade-in">
       <div class="max-w-7xl mx-auto flex justify-between items-center">
         <div class="flex items-center gap-8">
@@ -100,6 +100,7 @@ const themeStore = useThemeStore()
 const router = useRouter()
 const avatarInput = ref(null)
 const toastRef = ref(null)
+const loading = ref(true)
 
 const toast = (options) => toastRef.value?.addToast(options)
 const confirm = (options) => toastRef.value?.showConfirm(options)
@@ -138,8 +139,9 @@ async function refreshUser() {
   } catch (e) {
     if (e.response?.status === 401) {
       authStore.logout()
-      router.push('/login')
     }
+  } finally {
+    loading.value = false
   }
 }
 
