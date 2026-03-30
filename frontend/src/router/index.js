@@ -5,6 +5,7 @@ import Welcome from '../views/Welcome.vue'
 import Dashboard from '../views/Dashboard.vue'
 import ServerView from '../views/ServerView.vue'
 import Users from '../views/Users.vue'
+import Admin from '../views/Admin.vue'
 
 const routes = [
   { path: '/', redirect: '/login' },
@@ -14,6 +15,7 @@ const routes = [
   { path: '/dashboard', component: Dashboard, meta: { requiresAuth: true } },
   { path: '/server/:id', component: ServerView, meta: { requiresAuth: true } },
   { path: '/users', component: Users, meta: { requiresAuth: true } },
+  { path: '/admin', component: Admin, meta: { requiresAuth: true } },
 ]
 
 const router = createRouter({

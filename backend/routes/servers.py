@@ -326,3 +326,24 @@ def delete_server(sid: int, db: Session = Depends(get_db), user: User = Depends(
     db.delete(s)
     db.commit()
     return {"status": "deleted"}
+
+@router.post("/cleanup")
+def cleanup_containers(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(403, "Admin only")
+    valid_ids = {s.id for s in db.query(Server.id).all()}
+    removed = []
+    try:
+        for c in dc().containers.list(all=True):
+            if c.name.startswith("mc-panel-"):
+                try:
+                    cid = int(c.name.replace("mc-panel-", ""))
+                    if cid not in valid_ids:
+                        c.kill()
+                        c.remove(force=True)
+                        removed.append(c.name)
+                except:
+                    pass
+    except:
+        pass
+    return {"removed": removed}

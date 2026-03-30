@@ -9,7 +9,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from database import engine, Base
-from routes import auth_router, servers_router, console_router, files_router, players_router, plugins_router, settings_router, users_router, avatars_router
+from routes import auth_router, servers_router, console_router, files_router, players_router, plugins_router, settings_router, users_router, avatars_router, admin_router
 from config import SERVERS_DIR, BASE_DIR
 
 Base.metadata.create_all(bind=engine)
@@ -72,6 +72,27 @@ app.include_router(users_router)
 app.include_router(avatars_router)
 
 os.makedirs(SERVERS_DIR, exist_ok=True)
+
+# Auto-cleanup orphaned Docker containers on startup
+try:
+    import docker
+    from database import get_db
+    from models.server import Server
+    db = next(get_db())
+    valid_ids = {s.id for s in db.query(Server.id).all()}
+    for c in docker.from_env().containers.list(all=True):
+        if c.name.startswith("mc-panel-"):
+            try:
+                cid = int(c.name.replace("mc-panel-", ""))
+                if cid not in valid_ids:
+                    c.kill()
+                    c.remove(force=True)
+                    print(f"Cleaned up orphaned container: {c.name}")
+            except:
+                pass
+    db.close()
+except Exception as e:
+    print(f"Container cleanup skipped: {e}")
 
 DIST_DIR = os.path.join(BASE_DIR, "..", "frontend", "dist")
 
