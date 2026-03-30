@@ -9,7 +9,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from database import engine, Base
-from routes import auth_router, servers_router, console_router, files_router, players_router, plugins_router, settings_router, users_router, avatars_router, admin_router
+from routes import auth_router, servers_router, console_router, files_router, players_router, plugins_router, settings_router, users_router, avatars_router, admin_router, update_router
 from config import SERVERS_DIR, BASE_DIR
 
 Base.metadata.create_all(bind=engine)
@@ -70,6 +70,8 @@ app.include_router(plugins_router)
 app.include_router(settings_router)
 app.include_router(users_router)
 app.include_router(avatars_router)
+app.include_router(admin_router)
+app.include_router(update_router)
 
 os.makedirs(SERVERS_DIR, exist_ok=True)
 
