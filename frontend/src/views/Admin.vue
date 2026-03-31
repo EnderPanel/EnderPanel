@@ -14,6 +14,19 @@
       </button>
     </div>
 
+    <!-- Update Server Config -->
+    <div class="card mb-8">
+      <h3 class="font-semibold mb-3">Update Server</h3>
+      <div class="flex gap-2">
+        <input v-model="updateServerUrl" type="text" placeholder="https://enderpanel.space"
+          class="flex-1 px-3 py-2 rounded-lg bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-sm outline-none focus:border-mc-accent" />
+        <button @click="saveUpdateServer"
+          class="px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/15 transition">
+          Save
+        </button>
+      </div>
+    </div>
+
     <!-- Stats Cards -->
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
       <div class="card">

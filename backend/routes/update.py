@@ -1,9 +1,11 @@
 import os
+import json
 import shutil
 import tempfile
 import httpx
 import tarfile
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from models.user import User
 from utils.security import get_current_user
 
@@ -11,8 +13,27 @@ router = APIRouter(prefix="/api/update", tags=["update"])
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 VERSION_FILE = os.path.join(BASE_DIR, "VERSION")
-LATEST_URL = "https://enderpanel.space/latest.txt"
-DOWNLOAD_URL = "https://enderpanel.space/releases/enderpanel-{}.tar.gz"
+CONFIG_FILE = os.path.join(BASE_DIR, "backend", "data", "config.json")
+
+DEFAULT_CONFIG = {
+    "update_server": "https://enderpanel.space"
+}
+
+def load_config():
+    try:
+        return json.load(open(CONFIG_FILE))
+    except:
+        return DEFAULT_CONFIG.copy()
+
+def save_config(config):
+    os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(config, f, indent=2)
+
+def get_urls():
+    config = load_config()
+    base = config.get("update_server", "https://enderpanel.space").rstrip("/")
+    return f"{base}/latest.txt", f"{base}/releases/enderpanel-{{}}.tar.gz"
 
 def get_current_version():
     try:
@@ -99,3 +120,22 @@ async def install_update(current_user: User = Depends(get_current_user)):
         raise
     except Exception as e:
         raise HTTPException(500, f"Update failed: {str(e)}")
+
+class UpdateServerConfig(BaseModel):
+    url: str
+
+@router.get("/config")
+def get_update_config(current_user: User = Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(403, "Admin only")
+    config = load_config()
+    return {"update_server": config.get("update_server", "https://enderpanel.space")}
+
+@router.post("/config")
+def set_update_config(data: UpdateServerConfig, current_user: User = Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(403, "Admin only")
+    config = load_config()
+    config["update_server"] = data.url.rstrip("/")
+    save_config(config)
+    return {"update_server": config["update_server"]}
