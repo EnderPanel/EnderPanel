@@ -1,0 +1,14 @@
+from .auth import router as auth_router
+from .servers import router as servers_router
+from .console import router as console_router
+from .files import router as files_router
+from .players import router as players_router
+from .plugins import router as plugins_router
+from .settings import router as settings_router
+from .users import router as users_router
+from .avatars import router as avatars_router
+from .admin import router as admin_router
+from .update import router as update_router
+from .playit_runtime import router as playit_runtime_router
+from .server_network import router as server_network_router
+from .sftp import router as sftp_router
