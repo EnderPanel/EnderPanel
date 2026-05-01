@@ -4,7 +4,6 @@ import logging
 import httpx
 import asyncio
 import shutil
-import docker
 from docker.errors import NotFound as DockerNotFound
 from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
@@ -107,7 +106,8 @@ def ensure_server_properties(sid: int, name: str, port: int, max_players: int, m
 
     existing["server-port"] = str(port)
     existing["max-players"] = str(max_players)
-    existing["motd"] = motd
+    # Strip newlines from motd to prevent server.properties injection
+    existing["motd"] = motd.replace("\r", "").replace("\n", " ")
     existing["enable-rcon"] = "false"
     existing["broadcast-rcon-to-ops"] = "false"
     existing["rcon.port"] = "25575"
@@ -139,7 +139,7 @@ def get_status(sid: int) -> str:
         return "running" if c.status == "running" else "stopped"
     except DockerNotFound:
         return "stopped"
-    except:
+    except Exception:
         return "stopped"
 
 
@@ -173,6 +173,12 @@ class Create(BaseModel):
         if not sanitize(value).strip("_"):
             raise ValueError("Server name must contain letters, numbers, hyphens, or underscores")
         return value
+
+    @field_validator("motd")
+    @classmethod
+    def validate_motd(cls, value: str) -> str:
+        # Strip newlines to prevent server.properties injection
+        return value.replace("\r", "").replace("\n", " ")
 
     @field_validator("server_type")
     @classmethod
@@ -251,7 +257,7 @@ async def download_jar(stype: str, ver: str, path: str) -> tuple[bool, str | Non
                     if os.path.exists(os.path.join(path, "server.jar")):
                         return True, None
                 except Exception as e:
-                    print(f"NeoForge download error: {e}")
+                    logger.warning(f"NeoForge download error: {e}")
                     return False, f"NeoForge download error: {e}"
             elif stype == "forge":
                 try:
@@ -284,16 +290,16 @@ async def download_jar(stype: str, ver: str, path: str) -> tuple[bool, str | Non
                         return True, None
                     return False, "Forge installer completed, but expected libraries were not created."
                 except Exception as e:
-                    print(f"Forge download error: {e}")
+                    logger.warning(f"Forge download error: {e}")
                     return False, f"Forge download error: {e}"
     except Exception as e:
-        print(f"Download error: {e}")
+        logger.warning(f"Download error: {e}")
         return False, f"Download error: {e}"
 
     return False, f"Unsupported server type or installer failed for {stype} {ver}."
 
 @router.get("/versions/{server_type}")
-async def get_versions(server_type: str):
+async def get_versions(server_type: str, _user: User = Depends(get_current_user)):
     server_type = server_type.strip().lower()
     if server_type not in ALLOWED_SERVER_TYPES:
         raise HTTPException(status_code=400, detail="Unsupported server type")
@@ -343,7 +349,7 @@ async def get_versions(server_type: str):
                             versions.append(mc_ver)
                 versions.reverse()
     except Exception as e:
-        print(f"Error fetching {server_type} versions: {e}")
+        logger.warning(f"Error fetching {server_type} versions: {e}")
         detail = str(e)
 
     if not versions:
@@ -397,7 +403,7 @@ async def create_server(data: Create, db: Session = Depends(get_db), user: User 
         base = os.path.dirname(os.path.dirname(__file__))
         for tag, dockerfile in [("latest", "Dockerfile"), ("java17", "Dockerfile.java17"), ("java11", "Dockerfile.java11")]:
             try: client.images.get(f"{IMAGE}:{tag}")
-            except:
+            except Exception:
                 try: client.images.build(path=base, tag=f"{IMAGE}:{tag}", dockerfile=dockerfile)
                 except Exception as e:
                     logger.warning(f"Could not build Docker image {tag}: {e}")
@@ -485,7 +491,7 @@ async def start_server(
     base = os.path.dirname(os.path.dirname(__file__))
     for tag, dockerfile in [("latest", "Dockerfile"), ("java17", "Dockerfile.java17"), ("java11", "Dockerfile.java11")]:
         try: client.images.get(f"{IMAGE}:{tag}")
-        except:
+        except Exception:
             try: client.images.build(path=base, tag=f"{IMAGE}:{tag}", dockerfile=dockerfile)
             except Exception as e:
                 logger.warning(f"Could not build Docker image {tag}: {e}")
@@ -543,7 +549,7 @@ async def start_server(
         tty=True,
         stdin_open=True,
         volumes={d: {"bind": "/server", "mode": "rw"}},
-        ports={"25565/tcp": s.port, "25575/tcp": 25575 + s.id},
+        ports={"25565/tcp": s.port},
         mem_limit=f"{s.ram_max}m",
         memswap_limit=f"{s.ram_max + s.swap_mb}m",
         cpu_period=100000,
@@ -596,7 +602,7 @@ def stop_server(sid: int, db: Session = Depends(get_db), user: User = Depends(ge
     except DockerNotFound:
         pass
     except Exception as e:
-        print(f"Stop error: {e}")
+        logger.warning(f"Stop error: {e}")
     
     s.status = "stopped"
     db.commit()
@@ -617,14 +623,24 @@ async def delete_server(sid: int, db: Session = Depends(get_db), user: User = De
         c = dc().containers.get(cname(sid))
         c.kill()
         c.remove(force=True)
-    except: pass
+    except Exception: pass
     d = sdir(sid, s.name)
     if os.path.exists(d):
         try:
             shutil.rmtree(d)
         except PermissionError:
-            import subprocess as _sp
-            _sp.run(["sudo", "rm", "-rf", d], check=False)
+            # Try Docker-based removal for files owned by the container user
+            try:
+                parent = os.path.dirname(os.path.abspath(d))
+                name = os.path.basename(d)
+                dc().containers.run(
+                    IMAGE + ":latest",
+                    command=["rm", "-rf", f"/target/{name}"],
+                    remove=True,
+                    volumes={parent: {"bind": "/target", "mode": "rw"}},
+                )
+            except Exception as rm_err:
+                logger.warning(f"Could not remove server directory {d}: {rm_err}")
 
     stop_playit_container(s.id)
     db.delete(s)
@@ -698,8 +714,8 @@ def cleanup_containers(db: Session = Depends(get_db), current_user: User = Depen
                         c.kill()
                         c.remove(force=True)
                         removed.append(c.name)
-                except:
+                except Exception:
                     pass
-    except:
+    except Exception:
         pass
     return {"removed": removed}

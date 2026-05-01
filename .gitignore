@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Database & secrets
+*.db
+*.sqlite
+*.sqlite3
+.secret_key
+.data_encryption_key
+data/
+
+# Server runtime files
+backend/servers/
+backend/avatars/
+backend/sftp_state_*.json
+
+# Frontend cache & local env
+frontend/.vite/
+frontend/.env
+frontend/enderpanel-*.tar.gz
+
+# Frontend build & deps
+frontend/node_modules/
+frontend/dist/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log

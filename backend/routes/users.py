@@ -1,11 +1,19 @@
+import os
+import re
+import shutil
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from database import get_db
 from models.user import User
 from models.server import Server
 from utils.security import get_current_user, hash_password
+from utils.docker_client import get_docker_client
+from config import SERVERS_DIR
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -52,9 +60,9 @@ def get_user(user_id: int, db: Session = Depends(get_db), current_user: User = D
     }
 
 class UserUpdate(BaseModel):
-    username: Optional[str] = None
-    email: Optional[str] = None
-    password: Optional[str] = None
+    username: Optional[str] = Field(default=None, min_length=3, max_length=50)
+    email: Optional[str] = Field(default=None, min_length=5, max_length=100)
+    password: Optional[str] = Field(default=None, min_length=8, max_length=128)
     is_admin: Optional[bool] = None
 
 @router.put("/{user_id}")
@@ -99,16 +107,27 @@ def delete_user(user_id: int, db: Session = Depends(get_db), current_user: User 
         raise HTTPException(status_code=404, detail="User not found")
 
     servers = db.query(Server).filter(Server.owner_id == user_id).all()
+    try:
+        docker = get_docker_client()
+    except Exception:
+        docker = None
+
     for server in servers:
-        import shutil
-        import os
-        import re
-        from config import SERVERS_DIR
-        def sanitize_name(name):
-            return re.sub(r'[^a-zA-Z0-9_-]', '_', name)
-        server_dir = os.path.join(SERVERS_DIR, f"{server.id}-{sanitize_name(server.name)}")
+        # Stop and remove Docker containers before deleting server data
+        if docker:
+            for container_name in (f"mc-playit-{server.id}", f"mc-panel-{server.id}"):
+                try:
+                    c = docker.containers.get(container_name)
+                    c.remove(force=True)
+                except Exception as exc:
+                    logger.warning("Could not remove container %s during user deletion: %s", container_name, exc)
+
+        server_dir = os.path.join(SERVERS_DIR, f"{server.id}-{re.sub(r'[^a-zA-Z0-9_-]', '_', server.name)}")
         if os.path.exists(server_dir):
-            shutil.rmtree(server_dir)
+            try:
+                shutil.rmtree(server_dir)
+            except Exception as exc:
+                logger.warning("Could not remove server dir %s: %s", server_dir, exc)
         db.delete(server)
 
     db.delete(user)

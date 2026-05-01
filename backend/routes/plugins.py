@@ -1,5 +1,6 @@
 import os
 import json
+import logging
 import httpx
 import re
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,6 +13,7 @@ from utils.security import get_current_user
 from config import SERVERS_DIR
 
 router = APIRouter(prefix="/api/servers/{server_id}/mods", tags=["mods"])
+logger = logging.getLogger(__name__)
 
 MODRINTH_API = "https://api.modrinth.com/v2"
 
@@ -169,7 +171,7 @@ async def check_updates(server_id: int, db: Session = Depends(get_db), current_u
                             "version_type": latest["version_type"]
                         })
             except Exception as e:
-                print(f"Error checking updates for {project_id}: {e}")
+                logger.warning(f"Error checking updates for {project_id}: {e}")
 
     return {"updates": updates, "server_version": server.version}
 
@@ -212,7 +214,7 @@ async def link_modrinth(server_id: int, filename: str, project_id: str, db: Sess
             project_response = await client.get(f"{MODRINTH_API}/project/{project_id}")
             project = project_response.json()
             project_title = project.get("title", project_id)
-        except:
+        except Exception:
             raise HTTPException(status_code=404, detail="Modrinth project not found")
 
         _, loaders, _ = get_modrinth_config(server.server_type)
@@ -366,12 +368,14 @@ async def install_mod(server_id: int, project_id: str, version_id: str = None, d
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
 
-    import subprocess as _sp
     _, loaders, install_dir = get_modrinth_config(server.server_type)
     loaders_param = "[" + ",".join(f'"{l}"' for l in loaders) + "]"
     mods_dir = os.path.join(get_server_dir(server_id, server.name), install_dir)
     os.makedirs(mods_dir, exist_ok=True)
-    _sp.run(["sudo", "chmod", "-R", "777", mods_dir], check=False, capture_output=True)
+    try:
+        os.chmod(mods_dir, 0o755)
+    except PermissionError:
+        pass
 
     async with httpx.AsyncClient() as client:
         project_response = await client.get(f"{MODRINTH_API}/project/{project_id}")

@@ -176,6 +176,8 @@ async def console(ws: WebSocket, sid: int):
             command = cmd.strip()
             if not command:
                 continue
+            if len(command) > 4096:
+                command = command[:4096]
             payload = f"{command}\r".encode("utf-8", errors="replace")
             await loop.sock_sendall(raw_socket, payload)
     except WebSocketDisconnect:

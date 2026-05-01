@@ -12,9 +12,20 @@ class User(Base):
     hashed_password: Mapped[str] = Column(String(255))
     is_admin: Mapped[bool] = Column(Boolean, default=False)
     avatar: Mapped[Optional[str]] = Column(String(255), nullable=True)
-    totp_secret: Mapped[Optional[str]] = Column(String(32), nullable=True)
+    # Stored encrypted; column widened to 255 to hold Fernet ciphertext
+    _totp_secret: Mapped[Optional[str]] = Column("totp_secret", String(255), nullable=True)
     playit_agent_id: Mapped[Optional[str]] = Column(String(128), nullable=True)
     _playit_agent_secret: Mapped[Optional[str]] = Column("playit_agent_secret", String(255), nullable=True)
+
+    @property
+    def totp_secret(self) -> Optional[str]:
+        from utils.security import decrypt_secret
+        return decrypt_secret(self._totp_secret)
+
+    @totp_secret.setter
+    def totp_secret(self, value: Optional[str]) -> None:
+        from utils.security import encrypt_secret
+        self._totp_secret = encrypt_secret(value)
 
     @property
     def playit_agent_secret(self) -> Optional[str]:

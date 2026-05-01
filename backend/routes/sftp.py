@@ -101,7 +101,9 @@ def get_sftp_status(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    db.query(Server).filter(Server.id == server_id, Server.owner_id == current_user.id).first() or (_ for _ in ()).throw(HTTPException(status_code=404, detail="Server not found"))
+    server = db.query(Server).filter(Server.id == server_id, Server.owner_id == current_user.id).first()
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
     return _build_payload(server_id)
 
 

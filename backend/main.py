@@ -3,7 +3,10 @@ import re
 import html
 import shutil
 import socket
+import logging
 import subprocess
+
+logger = logging.getLogger(__name__)
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -48,7 +51,7 @@ def run_migrations():
                     )
                 )
                 conn.commit()
-                print(f"Migration: added column '{column}' to '{table}'")
+                logger.info(f"Migration: added column '{column}' to '{table}'")
 
 run_migrations()
 
@@ -61,16 +64,23 @@ def run_security_backfills():
         users = db.query(User).all()
         changed = False
         for user in users:
+            # Backfill plaintext playit_agent_secret -> encrypted
             raw_secret = getattr(user, "_playit_agent_secret", None)
             if raw_secret and not raw_secret.startswith("gAAAA"):
                 user.playit_agent_secret = raw_secret
+                changed = True
+
+            # Backfill plaintext totp_secret -> encrypted
+            raw_totp = getattr(user, "_totp_secret", None)
+            if raw_totp and not raw_totp.startswith("gAAAA"):
+                user.totp_secret = raw_totp
                 changed = True
 
         if changed:
             db.commit()
     except Exception as exc:
         db.rollback()
-        print(f"Security backfill skipped: {exc}")
+        logger.warning(f"Security backfill skipped: {exc}")
     finally:
         db.close()
 
@@ -89,7 +99,7 @@ def stop_managed_containers_on_shutdown() -> None:
     try:
         client = get_docker_client()
     except Exception as exc:
-        print(f"Shutdown cleanup skipped: could not get Docker client: {exc}")
+        logger.warning(f"Shutdown cleanup skipped: could not get Docker client: {exc}")
         return
 
     db = SessionLocal()
@@ -108,14 +118,14 @@ def stop_managed_containers_on_shutdown() -> None:
                     if container.status == "running":
                         container.stop(timeout=30)
                 except Exception as exc:
-                    print(f"Failed to stop container {container_name} during shutdown: {exc}")
+                    logger.warning(f"Failed to stop container {container_name} during shutdown: {exc}")
 
             server.status = "stopped"
 
         db.commit()
     except Exception as exc:
         db.rollback()
-        print(f"Shutdown cleanup failed: {exc}")
+        logger.warning(f"Shutdown cleanup failed: {exc}")
     finally:
         db.close()
 
@@ -125,7 +135,7 @@ async def lifespan(app: FastAPI):
         if os.path.exists(FRONTEND_DIR):
             start_frontend_dev_server(FRONTEND_DIR, 3000)
     except Exception as e:
-        print(f"Warning: Failed to start frontend dev server: {e}")
+        logger.warning(f"Failed to start frontend dev server: {e}")
     try:
         yield
     finally:
@@ -211,12 +221,12 @@ try:
                 if cid not in valid_ids:
                     c.kill()
                     c.remove(force=True)
-                    print(f"Cleaned up orphaned container: {c.name}")
-            except:
+                    logger.info(f"Cleaned up orphaned container: {c.name}")
+            except Exception:
                 pass
     db.close()
 except Exception as e:
-    print(f"Container cleanup skipped: {e}")
+    logger.warning(f"Container cleanup skipped: {e}")
 
 
 
@@ -255,15 +265,15 @@ def is_port_available(port: int, host: str = "0.0.0.0") -> bool:
 
 def start_frontend_dev_server(frontend_dir: str, port: int = 3000) -> None:
     if not os.path.exists(frontend_dir):
-        print(f"Frontend directory not found: {frontend_dir}")
+        logger.warning(f"Frontend directory not found: {frontend_dir}")
         return
 
     if not shutil.which("npm"):
-        print("npm not found: frontend dev server will not be started automatically.")
+        logger.warning("npm not found: frontend dev server will not be started automatically.")
         return
 
     if not is_port_available(port):
-        print(f"Port {port} is already in use; frontend dev server will not be started.")
+        logger.warning(f"Port {port} is already in use; frontend dev server will not be started.")
         return
 
     npm_cmd = ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", str(port)]
@@ -274,7 +284,7 @@ def start_frontend_dev_server(frontend_dir: str, port: int = 3000) -> None:
         popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
 
     try:
-        print(f"Starting frontend dev server on port {port}...")
+        logger.info(f"Starting frontend dev server on port {port}...")
         subprocess.Popen(
             npm_cmd,
             cwd=frontend_dir,
@@ -283,9 +293,9 @@ def start_frontend_dev_server(frontend_dir: str, port: int = 3000) -> None:
             stderr=subprocess.STDOUT,
             **popen_kwargs,
         )
-        print(f"Started frontend dev server; open http://localhost:{port} or http://<this-machine-ip>:{port}")
+        logger.info(f"Started frontend dev server; open http://localhost:{port} or http://<this-machine-ip>:{port}")
     except Exception as exc:
-        print(f"Failed to start frontend dev server: {exc}")
+        logger.warning(f"Failed to start frontend dev server: {exc}")
 
 
 if __name__ == "__main__":
