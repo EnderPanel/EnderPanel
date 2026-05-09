@@ -146,5 +146,7 @@ def disable_2fa(data: Disable2FA, db: Session = Depends(get_db), current_user: U
     return {"success": True}
 
 @router.get("/me")
-def get_me(current_user: User = Depends(get_current_user)):
+def get_me(response: Response, current_user: User = Depends(get_current_user)):
+    token = create_access_token({"sub": current_user.username})
+    response.headers["X-EnderPanel-Token"] = token
     return user_to_dict(current_user)

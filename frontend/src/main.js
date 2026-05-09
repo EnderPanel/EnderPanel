@@ -7,6 +7,16 @@ import './style.css'
 
 axios.defaults.withCredentials = true
 
+axios.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token')
+  const requestUrl = String(config.url || '')
+  if (token && requestUrl.startsWith('/api') && !config.headers?.Authorization) {
+    config.headers = config.headers || {}
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
 const pinia = createPinia()
 const app = createApp(App)
 app.use(pinia)

@@ -65,6 +65,10 @@ export const useAuthStore = defineStore('auth', {
       initPromise = (async () => {
         try {
           const res = await axios.get('/api/auth/me')
+          const sessionToken = res.headers?.['x-enderpanel-token']
+          if (sessionToken) {
+            localStorage.setItem('token', sessionToken)
+          }
           this.user = res.data
           localStorage.setItem('user', JSON.stringify(this.user))
           return this.user
