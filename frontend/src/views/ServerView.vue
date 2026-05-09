@@ -1266,12 +1266,42 @@ function clearConsoleHistory() {
 
 let ws = null
 let reconnectTimeout = null
+let consoleRefreshInterval = null
 let shouldKeepConsoleConnected = false
 let reconnectAttempts = 0
 let consoleLineBuffer = ''
 let hasLoadedConsoleHistory = false
 let lastConsoleLine = ''
 let lastConsoleStartedAt = ''
+let consoleRefreshInFlight = false
+
+function stopConsoleRefreshLoop() {
+  if (consoleRefreshInterval) {
+    clearInterval(consoleRefreshInterval)
+    consoleRefreshInterval = null
+  }
+}
+
+function startConsoleRefreshLoop() {
+  stopConsoleRefreshLoop()
+  consoleRefreshInterval = setInterval(async () => {
+    if (activeTab.value !== 'console' || !shouldKeepConsoleConnected || consoleRefreshInFlight) {
+      return
+    }
+
+    consoleRefreshInFlight = true
+    try {
+      if (server.value?.status === 'running') {
+        if (!ws || ws.readyState === WebSocket.CLOSED) {
+          connectWebSocket({ replay: true })
+        }
+      }
+      await fetchRecentConsoleLogs()
+    } finally {
+      consoleRefreshInFlight = false
+    }
+  }, 500)
+}
 
 watch(activeTab, (newTab) => {
   if (newTab === 'files') {
@@ -1279,13 +1309,14 @@ watch(activeTab, (newTab) => {
   }
   if (newTab === 'console') {
     shouldKeepConsoleConnected = true
+    startConsoleRefreshLoop()
+    void fetchRecentConsoleLogs()
     if (server.value?.status === 'running' && (!ws || ws.readyState === WebSocket.CLOSED)) {
-      connectWebSocket({ replay: !hasLoadedConsoleHistory || consoleLines.value.length === 0 })
-    } else {
-      void fetchRecentConsoleLogs()
+      connectWebSocket({ replay: true })
     }
   } else {
     shouldKeepConsoleConnected = false
+    stopConsoleRefreshLoop()
     disconnectWebSocket()
   }
 })
@@ -2468,6 +2499,7 @@ onMounted(async () => {
     await fetchNetworkStats()
   }
   if (activeTab.value === 'console') {
+    startConsoleRefreshLoop()
     if (server.value?.status === 'running') {
       connectWebSocket()
     } else {
@@ -2480,6 +2512,17 @@ onMounted(async () => {
     await fetchPlayitStatus()
     if (activeTab.value === 'network') {
       await fetchNetworkStats()
+    }
+    if (activeTab.value === 'console') {
+      if (server.value?.status === 'running') {
+        if (!ws || ws.readyState === WebSocket.CLOSED) {
+          connectWebSocket({ replay: true })
+        } else if (consoleLines.value.length === 0) {
+          await fetchRecentConsoleLogs()
+        }
+      } else {
+        await fetchRecentConsoleLogs()
+      }
     }
   }, 5000)
   
@@ -2499,6 +2542,7 @@ let statusInterval = null
 let updateCheckInterval = null
 
 onUnmounted(() => {
+  stopConsoleRefreshLoop()
   disconnectWebSocket()
   if (statusInterval) {
     clearInterval(statusInterval)
