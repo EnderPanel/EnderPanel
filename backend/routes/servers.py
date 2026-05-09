@@ -195,7 +195,13 @@ def extract_neoforge_mc_version(value: str) -> str | None:
     parts = value.split(".")
     if len(parts) < 2 or not all(part.isdigit() for part in parts[:2]):
         return None
-    return f"{parts[0]}.{parts[1]}"
+    first = int(parts[0])
+    second = int(parts[1])
+    if first == 1:
+        if len(parts) < 3 or not parts[2].isdigit():
+            return None
+        return f"1.{second}.{parts[2]}"
+    return f"{first}.{second}"
 
 
 def unique_versions_desc(values: list[str]) -> list[str]:
