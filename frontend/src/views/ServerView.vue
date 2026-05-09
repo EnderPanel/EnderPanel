@@ -1266,7 +1266,7 @@ function clearConsoleHistory() {
 
 let ws = null
 let reconnectTimeout = null
-let consoleRefreshInterval = null
+let consoleRefreshTimeout = null
 let shouldKeepConsoleConnected = false
 let reconnectAttempts = 0
 let consoleLineBuffer = ''
@@ -1274,33 +1274,56 @@ let hasLoadedConsoleHistory = false
 let lastConsoleLine = ''
 let lastConsoleStartedAt = ''
 let consoleRefreshInFlight = false
+let consoleStartupBoostUntil = 0
 
 function stopConsoleRefreshLoop() {
-  if (consoleRefreshInterval) {
-    clearInterval(consoleRefreshInterval)
-    consoleRefreshInterval = null
+  if (consoleRefreshTimeout) {
+    clearTimeout(consoleRefreshTimeout)
+    consoleRefreshTimeout = null
   }
+}
+
+function getConsoleRefreshDelay() {
+  return Date.now() < consoleStartupBoostUntil ? 500 : 1000
+}
+
+function bumpConsoleStartupBoost(ms = 10000) {
+  consoleStartupBoostUntil = Date.now() + ms
 }
 
 function startConsoleRefreshLoop() {
   stopConsoleRefreshLoop()
-  consoleRefreshInterval = setInterval(async () => {
-    if (activeTab.value !== 'console' || !shouldKeepConsoleConnected || consoleRefreshInFlight) {
+  const tick = async () => {
+    if (!shouldKeepConsoleConnected || activeTab.value !== 'console') {
+      consoleRefreshTimeout = null
       return
     }
 
-    consoleRefreshInFlight = true
-    try {
-      if (server.value?.status === 'running') {
-        if (!ws || ws.readyState === WebSocket.CLOSED) {
-          connectWebSocket({ replay: true })
+    if (!consoleRefreshInFlight) {
+      consoleRefreshInFlight = true
+      try {
+        const socketOpen = ws && ws.readyState === WebSocket.OPEN
+        if (server.value?.status === 'running') {
+          if (!socketOpen) {
+            connectWebSocket({ replay: true })
+            await fetchRecentConsoleLogs()
+          } else if (Date.now() < consoleStartupBoostUntil && consoleLines.value.length === 0) {
+            await fetchRecentConsoleLogs()
+          }
+        } else {
+          await fetchRecentConsoleLogs()
         }
+      } finally {
+        consoleRefreshInFlight = false
       }
-      await fetchRecentConsoleLogs()
-    } finally {
-      consoleRefreshInFlight = false
     }
-  }, 500)
+
+    consoleRefreshTimeout = setTimeout(() => {
+      void tick()
+    }, getConsoleRefreshDelay())
+  }
+
+  void tick()
 }
 
 watch(activeTab, (newTab) => {
@@ -1991,6 +2014,7 @@ async function startServer() {
     }
 
     clearConsoleHistory()
+    bumpConsoleStartupBoost()
     await axios.post(`/api/servers/${serverId}/start`)
     await fetchServer()
     await syncPlayitStatus()
@@ -2017,6 +2041,7 @@ async function acceptEula() {
   toast({ type: 'success', title: 'EULA Accepted', message: 'Server starting...' })
   try {
     clearConsoleHistory()
+    bumpConsoleStartupBoost()
     await axios.post(`/api/servers/${serverId}/start`, { accept_eula: true })
     await fetchServer()
     await syncPlayitStatus()
