@@ -105,7 +105,7 @@ echo ""
 echo "Downloading EnderPanel..."
 INSTALL_DIR="$HOME/EnderPanel"
 TMP_DIR=$(mktemp -d)
-RELEASE_URL="https://enderpanel.space/releases/latest.tar.gz?v=${RELEASE_VERSION}"
+RELEASE_URL="https://raw.githubusercontent.com/EnderPanel/Releases/main/enderpanel-latest.tar.gz"
 curl -sL "$RELEASE_URL" -o /tmp/enderpanel.tar.gz || { echo "Download failed."; exit 1; }
 tar -xzf /tmp/enderpanel.tar.gz -C "$TMP_DIR" || { echo "Failed to extract archive."; exit 1; }
 rm /tmp/enderpanel.tar.gz

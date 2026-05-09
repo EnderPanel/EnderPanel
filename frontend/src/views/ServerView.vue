@@ -1857,6 +1857,13 @@ function connectWebSocket(options = {}) {
   }
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const host = (() => {
+    const { hostname, port } = window.location
+    if (port === '3000' || port === '5173') {
+      return `${hostname}:8000`
+    }
+    return window.location.host
+  })()
   const params = new URLSearchParams()
   if (server.value?.container_started_at) {
     params.set('startedAt', server.value.container_started_at)
@@ -1864,8 +1871,12 @@ function connectWebSocket(options = {}) {
   if (replay) {
     params.set('replay', '1')
   }
+  const authToken = localStorage.getItem('token')
+  if (authToken) {
+    params.set('token', authToken)
+  }
   const query = params.toString() ? `?${params.toString()}` : ''
-  const wsUrl = `${protocol}//${window.location.host}/api/servers/${serverId}/ws${query}`
+  const wsUrl = `${protocol}//${host}/api/servers/${serverId}/ws${query}`
 
   try {
     const openedAt = Date.now()

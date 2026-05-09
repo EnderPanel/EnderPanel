@@ -32,12 +32,14 @@ export const useAuthStore = defineStore('auth', {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       })
       this.user = res.data.user
+      localStorage.setItem('token', res.data.access_token || '')
       localStorage.setItem('user', JSON.stringify(this.user))
       this.initialized = true
     },
     async register(username, email, password) {
       const res = await axios.post('/api/auth/register', { username, email, password })
       this.user = res.data.user
+      localStorage.setItem('token', res.data.access_token || '')
       localStorage.setItem('user', JSON.stringify(this.user))
       this.initialized = true
     },

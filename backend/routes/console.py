@@ -90,8 +90,11 @@ def open_attach_socket(name: str):
 def authenticate_websocket(ws: WebSocket, db: Session) -> User | None:
     token = ws.cookies.get(AUTH_COOKIE_NAME)
     authorization = ws.headers.get("authorization")
+    query_token = ws.query_params.get("token")
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization.split(" ", 1)[1].strip()
+    elif query_token:
+        token = query_token.strip()
 
     if not token:
         return None

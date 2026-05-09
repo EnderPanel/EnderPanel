@@ -19,7 +19,7 @@ if (-not $isAdmin) {
 $ErrorActionPreference = "Stop"
 $InstallDir = Join-Path $env:USERPROFILE "EnderPanel"
 $ReleaseVersion = "__RELEASE_VERSION__"
-$ReleaseUrl = "https://enderpanel.space/releases/latest.tar.gz?v=$ReleaseVersion"
+$ReleaseUrl = "https://raw.githubusercontent.com/EnderPanel/Releases/main/enderpanel-latest.tar.gz"
 
 function Refresh-Path {
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
