@@ -296,8 +296,7 @@ provide('confirm', confirm)
 
 onMounted(() => {
   themeStore.init()
-  authStore.init()
-  refreshUser()
+  loading.value = false
 })
 
 const isAdmin = computed(() => Boolean(authStore.user?.is_admin))
@@ -308,22 +307,6 @@ const brandIconSrc = computed(() => (isDqsTheme.value ? `${window.location.origi
 
 const userAvatar = computed(() => authStore.user?.avatar || null)
 
-async function refreshUser() {
-  const hadToken = !!authStore.token
-  try {
-    const res = await axios.get('/api/auth/me')
-    localStorage.setItem('user', JSON.stringify(res.data))
-    authStore.user = res.data
-  } catch (e) {
-    if (e.response?.status === 401 && hadToken) {
-      authStore.logout()
-      router.push('/login')
-    }
-  } finally {
-    loading.value = false
-  }
-}
-
 async function uploadAvatar(event) {
   const file = event.target.files[0]
   if (!file) return
@@ -333,7 +316,7 @@ async function uploadAvatar(event) {
 
   try {
     await axios.post('/api/user/avatar', formData)
-    await refreshUser()
+    await authStore.init(true)
   } catch (e) {
     toast({ title: 'Failed to upload avatar', message: e.response?.data?.detail || '', type: 'error' })
   }

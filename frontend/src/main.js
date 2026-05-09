@@ -18,10 +18,11 @@ axios.interceptors.response.use(
   response => response,
   error => {
     if (error.response && error.response.status === 401) {
+      const requestUrl = String(error.config?.url || '')
       const authStore = useAuthStore()
       authStore.clearSession()
-      
-      if (router.currentRoute.value.path !== '/login') {
+
+      if (!requestUrl.includes('/api/auth/me') && router.currentRoute.value.path !== '/login') {
         router.push('/login')
       }
     }

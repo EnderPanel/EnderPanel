@@ -177,7 +177,8 @@ echo ""
 echo "Downloading EnderPanel..."
 INSTALL_DIR="$HOME/EnderPanel"
 TMP_DIR=$(mktemp -d)
-curl -sL "https://enderpanel.space/releases/latest.tar.gz" -o /tmp/enderpanel.tar.gz || { echo "Download failed."; exit 1; }
+RELEASE_URL="https://enderpanel.space/releases/latest.tar.gz?v=${RELEASE_VERSION}"
+curl -sL "$RELEASE_URL" -o /tmp/enderpanel.tar.gz || { echo "Download failed."; exit 1; }
 tar -xzf /tmp/enderpanel.tar.gz -C "$TMP_DIR" || { echo "Failed to extract archive."; exit 1; }
 rm /tmp/enderpanel.tar.gz
 # Flatten single subdirectory wrapper if present (e.g. enderpanel-2.0.0-r2/)
@@ -231,4 +232,5 @@ echo "To start EnderPanel:"
 echo "  cd $INSTALL_DIR/backend"
 echo "  python3 main.py"
 echo ""
-echo "Open http://localhost:3000 in your browser"
+echo "Open http://localhost:8000 in your browser"
+RELEASE_VERSION="__RELEASE_VERSION__"

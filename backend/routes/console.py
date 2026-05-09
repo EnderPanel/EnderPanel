@@ -4,15 +4,15 @@ import socket
 from contextlib import suppress
 
 from docker.errors import NotFound as DockerNotFound
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
 from config import ALGORITHM, SECRET_KEY
-from database import SessionLocal
+from database import SessionLocal, get_db
 from models.server import Server
 from models.user import User
-from utils.security import AUTH_COOKIE_NAME
+from utils.security import AUTH_COOKIE_NAME, get_current_user
 from utils.docker_client import get_docker_client
 
 
@@ -36,18 +36,22 @@ def clean_console_text(value: str) -> str:
     return cleaned
 
 
-async def send_recent_logs(ws: WebSocket, name: str) -> None:
+async def get_recent_logs_text(name: str, tail: int = 100) -> str:
     proc = await asyncio.create_subprocess_exec(
         "docker",
         "logs",
         "--tail",
-        "100",
+        str(tail),
         name,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
     )
     stdout, _ = await proc.communicate()
-    text = clean_console_text(stdout.decode("utf-8", errors="replace"))
+    return clean_console_text(stdout.decode("utf-8", errors="replace"))
+
+
+async def send_recent_logs(ws: WebSocket, name: str, tail: int = 100) -> None:
+    text = await get_recent_logs_text(name, tail=tail)
     if text.strip():
         await ws.send_text(text)
 
@@ -102,6 +106,47 @@ def authenticate_websocket(ws: WebSocket, db: Session) -> User | None:
         return None
 
     return db.query(User).filter(User.username == username).first()
+
+
+@router.get("/{sid}/console/recent")
+async def recent_console_logs(
+    sid: int,
+    tail: int = Query(default=200, ge=1, le=400),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    server = db.query(Server).filter(Server.id == sid, Server.owner_id == user.id).first()
+    if not server:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    name = container_name(sid)
+    status = "missing"
+    started_at = ""
+    exit_code = None
+
+    try:
+        container = get_container(name)
+        container.reload()
+        status = container.status
+        state = container.attrs.get("State") or {}
+        started_at = str(state.get("StartedAt") or "")
+        exit_code = state.get("ExitCode")
+    except DockerNotFound:
+        pass
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Console unavailable: {exc}")
+
+    text = ""
+    if status != "missing":
+        text = await get_recent_logs_text(name, tail=tail)
+
+    lines = [line.rstrip() for line in text.splitlines() if line.strip()]
+    return {
+        "status": status,
+        "started_at": started_at,
+        "exit_code": exit_code,
+        "lines": lines,
+    }
 
 
 @router.websocket("/{sid}/ws")
@@ -176,8 +221,6 @@ async def console(ws: WebSocket, sid: int):
             command = cmd.strip()
             if not command:
                 continue
-            if len(command) > 4096:
-                command = command[:4096]
             payload = f"{command}\r".encode("utf-8", errors="replace")
             await loop.sock_sendall(raw_socket, payload)
     except WebSocketDisconnect:

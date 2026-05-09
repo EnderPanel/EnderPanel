@@ -1,5 +1,6 @@
 import json
 import os
+from contextlib import suppress
 
 from docker.errors import NotFound as DockerNotFound
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,6 +11,7 @@ from config import BASE_DIR, SERVERS_DIR
 from database import get_db
 from models.server import Server
 from models.user import User
+from utils.docker_cleanup import remove_container_if_exists
 from utils.docker_client import get_docker_client
 from utils.security import decrypt_secret, encrypt_secret, get_current_user
 
@@ -70,9 +72,15 @@ def _container_status(server_id: int) -> str:
 
 def _stop_container(server_id: int) -> None:
     try:
-        get_docker_client().containers.get(_container_name(server_id)).remove(force=True)
+        remove_container_if_exists(_container_name(server_id), stop_timeout=5)
     except DockerNotFound:
         pass
+
+
+def cleanup_sftp_server_artifacts(server_id: int) -> None:
+    _stop_container(server_id)
+    with suppress(OSError):
+        os.remove(_state_path(server_id))
 
 
 def _get_server_dir(server_id: int) -> str | None:
@@ -101,9 +109,7 @@ def get_sftp_status(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    server = db.query(Server).filter(Server.id == server_id, Server.owner_id == current_user.id).first()
-    if not server:
-        raise HTTPException(status_code=404, detail="Server not found")
+    db.query(Server).filter(Server.id == server_id, Server.owner_id == current_user.id).first() or (_ for _ in ()).throw(HTTPException(status_code=404, detail="Server not found"))
     return _build_payload(server_id)
 
 

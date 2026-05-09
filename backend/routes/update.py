@@ -6,7 +6,6 @@ import httpx
 import tarfile
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from typing import Optional
 from models.user import User
 from utils.security import get_current_user
 
@@ -72,9 +71,7 @@ def get_payload_dir(extract_dir: str) -> str:
 
 
 @router.get("/check")
-async def check_update(current_user: User = Depends(get_current_user)):
-    if not current_user.is_admin:
-        raise HTTPException(403, "Admin only")
+async def check_update():
     try:
         latest_url, _ = get_urls()
         async with httpx.AsyncClient(timeout=10) as c:
@@ -173,18 +170,7 @@ def get_update_config(current_user: User = Depends(get_current_user)):
 def set_update_config(data: UpdateServerConfig, current_user: User = Depends(get_current_user)):
     if not current_user.is_admin:
         raise HTTPException(403, "Admin only")
-    url = data.url.strip().rstrip("/")
-    if not (url.startswith("https://") or url.startswith("http://")):
-        raise HTTPException(400, "Update server URL must start with http:// or https://")
-    # Block private/internal addresses to prevent SSRF
-    import re as _re
-    _private = _re.compile(
-        r"^https?://(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|0\.0\.0\.0|::1)",
-        _re.IGNORECASE,
-    )
-    if _private.match(url):
-        raise HTTPException(400, "Update server URL must not point to a private/internal address")
     config = load_config()
-    config["update_server"] = url
+    config["update_server"] = data.url.rstrip("/")
     save_config(config)
     return {"update_server": config["update_server"]}

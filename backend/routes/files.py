@@ -8,7 +8,7 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import List
 from database import get_db
 from models.user import User
@@ -20,9 +20,11 @@ from config import SERVERS_DIR
 router = APIRouter(prefix="/api/servers/{server_id}/files", tags=["files"])
 IS_LINUX = platform.system() == "Linux"
 FILE_HELPER_IMAGE = os.getenv("FILE_HELPER_IMAGE", "mc-panel-server:latest")
-MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_BYTES", str(500 * 1024 * 1024)))  # 500 MB default
-MAX_READ_SIZE = int(os.getenv("MAX_READ_BYTES", str(10 * 1024 * 1024)))  # 10 MB default
-MAX_WRITE_SIZE = int(os.getenv("MAX_WRITE_BYTES", str(10 * 1024 * 1024)))  # 10 MB default
+FILE_HELPER_PREFIX = "mc-panel-helper"
+
+
+def _helper_container_name(purpose: str) -> str:
+    return f"{FILE_HELPER_PREFIX}-{purpose}-{os.getpid()}-{time.time_ns()}"
 
 def sanitize_name(name: str) -> str:
     return re.sub(r'[^a-zA-Z0-9_-]', '_', name)
@@ -98,8 +100,10 @@ def _docker_fix_permissions(path: str) -> bool:
     try:
         get_docker_client().containers.run(
             FILE_HELPER_IMAGE,
+            name=_helper_container_name("chmod"),
             command=["sh", "-lc", "chmod -R a+rwX /target || true"],
             remove=True,
+            labels={"enderpanel.helper": "true", "enderpanel.purpose": "chmod"},
             volumes={os.path.abspath(path): {"bind": "/target", "mode": "rw"}},
         )
         return True
@@ -129,8 +133,10 @@ def _docker_remove(path: str) -> bool:
     try:
         get_docker_client().containers.run(
             FILE_HELPER_IMAGE,
+            name=_helper_container_name("rm"),
             command=["rm", "-rf", f"/target/{name}"],
             remove=True,
+            labels={"enderpanel.helper": "true", "enderpanel.purpose": "rm"},
             volumes={parent: {"bind": "/target", "mode": "rw"}},
         )
         return not os.path.exists(path)
@@ -233,17 +239,13 @@ def read_file(server_id: int, path: str, db: Session = Depends(get_db), current_
     if not os.path.exists(file_path) or not os.path.isfile(file_path):
         raise HTTPException(status_code=404, detail="File not found")
 
-    file_size = os.path.getsize(file_path)
-    if file_size > MAX_READ_SIZE:
-        raise HTTPException(status_code=400, detail=f"File is too large to read in the editor ({file_size} bytes). Max is {MAX_READ_SIZE} bytes.")
-
     with open(file_path, "r", encoding="utf-8", errors="replace") as f:
         content = f.read()
     return {"content": content, "path": path}
 
 class FileWrite(BaseModel):
     path: str
-    content: str = Field(max_length=10 * 1024 * 1024)  # 10 MB max
+    content: str
 
 @router.post("/write")
 def write_file(server_id: int, file: FileWrite, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -266,9 +268,7 @@ async def upload_file(server_id: int, path: str = "", file: UploadFile = File(..
     upload_dir = safe_path(server_id, path, server.name)
     os.makedirs(upload_dir, exist_ok=True)
     fix_permissions(upload_dir)
-    content = await file.read(MAX_UPLOAD_SIZE + 1)
-    if len(content) > MAX_UPLOAD_SIZE:
-        raise HTTPException(status_code=413, detail=f"File too large. Maximum upload size is {MAX_UPLOAD_SIZE} bytes.")
+    content = await file.read()
     upload_path = safe_upload_path(upload_dir, file.filename)
     sudo_write(upload_path, content)
     return {"status": "uploaded", "filename": file.filename}
@@ -288,10 +288,7 @@ async def upload_folder(server_id: int, path: str = "", files: List[UploadFile] 
         file_path = safe_upload_path(upload_dir, file.filename, allow_relative=True)
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         fix_permissions(os.path.dirname(file_path))
-        content = await file.read(MAX_UPLOAD_SIZE + 1)
-        if len(content) > MAX_UPLOAD_SIZE:
-            raise HTTPException(status_code=413, detail=f"File '{file.filename}' is too large. Maximum upload size is {MAX_UPLOAD_SIZE} bytes.")
-        sudo_write(file_path, content)
+        sudo_write(file_path, await file.read())
         uploaded.append(file.filename)
 
     return {"status": "uploaded", "count": len(uploaded), "files": uploaded}
@@ -399,14 +396,7 @@ def restore_backup(server_id: int, filename: str, db: Session = Depends(get_db),
     if not os.path.exists(backup_path):
         raise HTTPException(status_code=404, detail="Backup not found")
 
-    # Check actual Docker status, not just the DB field (which may be stale)
-    actual_status = "stopped"
-    try:
-        c = get_docker_client().containers.get(f"mc-panel-{server_id}")
-        actual_status = c.status
-    except Exception:
-        pass
-    if actual_status == "running":
+    if server.status == "running":
         raise HTTPException(status_code=400, detail="Stop server before restoring")
 
     server_dir = get_server_dir(server_id, server.name)

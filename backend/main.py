@@ -3,10 +3,9 @@ import re
 import html
 import shutil
 import socket
-import logging
 import subprocess
-
-logger = logging.getLogger(__name__)
+import signal
+import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,6 +18,7 @@ from database import engine, Base, SessionLocal
 from routes import auth_router, servers_router, console_router, files_router, players_router, plugins_router, settings_router, users_router, avatars_router, admin_router, update_router, playit_runtime_router, server_network_router, sftp_router
 from config import SERVERS_DIR, BASE_DIR
 from utils.docker_client import close_docker_client, get_docker_client
+from utils.docker_cleanup import remove_container_if_exists
 from utils.http_compat import patch_http_response_close
 
 patch_http_response_close()
@@ -51,7 +51,7 @@ def run_migrations():
                     )
                 )
                 conn.commit()
-                logger.info(f"Migration: added column '{column}' to '{table}'")
+                print(f"Migration: added column '{column}' to '{table}'")
 
 run_migrations()
 
@@ -64,23 +64,16 @@ def run_security_backfills():
         users = db.query(User).all()
         changed = False
         for user in users:
-            # Backfill plaintext playit_agent_secret -> encrypted
             raw_secret = getattr(user, "_playit_agent_secret", None)
             if raw_secret and not raw_secret.startswith("gAAAA"):
                 user.playit_agent_secret = raw_secret
-                changed = True
-
-            # Backfill plaintext totp_secret -> encrypted
-            raw_totp = getattr(user, "_totp_secret", None)
-            if raw_totp and not raw_totp.startswith("gAAAA"):
-                user.totp_secret = raw_totp
                 changed = True
 
         if changed:
             db.commit()
     except Exception as exc:
         db.rollback()
-        logger.warning(f"Security backfill skipped: {exc}")
+        print(f"Security backfill skipped: {exc}")
     finally:
         db.close()
 
@@ -93,13 +86,14 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
 DIST_DIR = os.path.join(BASE_DIR, "..", "frontend", "dist")
 FRONTEND_DIR = os.path.join(BASE_DIR, "..", "frontend")
 BRANDING_DIR = os.path.join(BASE_DIR, "branding")
+DIST_INDEX = os.path.join(DIST_DIR, "index.html")
 
 
 def stop_managed_containers_on_shutdown() -> None:
     try:
         client = get_docker_client()
     except Exception as exc:
-        logger.warning(f"Shutdown cleanup skipped: could not get Docker client: {exc}")
+        print(f"Shutdown cleanup skipped: could not get Docker client: {exc}")
         return
 
     db = SessionLocal()
@@ -118,24 +112,26 @@ def stop_managed_containers_on_shutdown() -> None:
                     if container.status == "running":
                         container.stop(timeout=30)
                 except Exception as exc:
-                    logger.warning(f"Failed to stop container {container_name} during shutdown: {exc}")
+                    print(f"Failed to stop container {container_name} during shutdown: {exc}")
 
             server.status = "stopped"
 
         db.commit()
     except Exception as exc:
         db.rollback()
-        logger.warning(f"Shutdown cleanup failed: {exc}")
+        print(f"Shutdown cleanup failed: {exc}")
     finally:
         db.close()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
-        if os.path.exists(FRONTEND_DIR):
+        if should_start_frontend_dev_server():
             start_frontend_dev_server(FRONTEND_DIR, 3000)
+        elif os.path.exists(DIST_INDEX):
+            print("Using built frontend from frontend/dist; open http://localhost:8000")
     except Exception as e:
-        logger.warning(f"Failed to start frontend dev server: {e}")
+        print(f"Warning: Failed to start frontend dev server: {e}")
     try:
         yield
     finally:
@@ -207,26 +203,80 @@ os.makedirs(SERVERS_DIR, exist_ok=True)
 os.makedirs(BRANDING_DIR, exist_ok=True)
 app.mount("/branding", StaticFiles(directory=BRANDING_DIR), name="branding")
 
-# Auto-cleanup orphaned Docker containers on startup
-try:
-    from database import get_db
-    from models.server import Server
-    from utils.docker_client import get_docker_client
-    db = next(get_db())
-    valid_ids = {s.id for s in db.query(Server.id).all()}
-    for c in get_docker_client().containers.list(all=True):
-        if c.name.startswith("mc-panel-"):
+MANAGED_CONTAINER_PREFIXES = (
+    "mc-panel-",
+    "mc-playit-",
+    "mc-panel-sftp-",
+    "mc-panel-helper-",
+)
+
+
+def _extract_managed_server_id(container_name: str) -> int | None:
+    for prefix in MANAGED_CONTAINER_PREFIXES:
+        if container_name.startswith(prefix):
+            suffix = container_name[len(prefix):]
             try:
-                cid = int(c.name.replace("mc-panel-", ""))
-                if cid not in valid_ids:
-                    c.kill()
-                    c.remove(force=True)
-                    logger.info(f"Cleaned up orphaned container: {c.name}")
-            except Exception:
-                pass
-    db.close()
+                return int(suffix)
+            except ValueError:
+                return None
+    return None
+
+
+def _is_helper_container(container_name: str) -> bool:
+    return container_name.startswith("mc-panel-helper-")
+
+
+def cleanup_orphaned_managed_containers_on_startup() -> None:
+    from models.server import Server
+    from routes.sftp import cleanup_sftp_server_artifacts
+
+    db = SessionLocal()
+    try:
+        valid_ids = {row.id for row in db.query(Server.id).all()}
+        client = get_docker_client()
+        for container in client.containers.list(all=True):
+            container_name = container.name
+            if _is_helper_container(container_name):
+                try:
+                    remove_container_if_exists(container_name, stop_timeout=5)
+                    print(f"Cleaned up orphaned helper container: {container_name}")
+                except Exception as exc:
+                    print(f"Failed to clean up orphaned helper container {container_name}: {exc}")
+                continue
+
+            server_id = _extract_managed_server_id(container_name)
+            if server_id is None or server_id in valid_ids:
+                continue
+
+            try:
+                if container_name.startswith("mc-panel-sftp-"):
+                    cleanup_sftp_server_artifacts(server_id)
+                else:
+                    remove_container_if_exists(container_name, stop_timeout=5)
+                print(f"Cleaned up orphaned container: {container_name}")
+            except Exception as exc:
+                print(f"Failed to clean up orphaned container {container_name}: {exc}")
+
+        for entry in os.listdir(BASE_DIR):
+            match = re.fullmatch(r"sftp_state_(\d+)\.json", entry)
+            if not match:
+                continue
+            server_id = int(match.group(1))
+            if server_id in valid_ids:
+                continue
+            try:
+                cleanup_sftp_server_artifacts(server_id)
+                print(f"Removed orphaned SFTP state: {entry}")
+            except Exception as exc:
+                print(f"Failed to remove orphaned SFTP state {entry}: {exc}")
+    finally:
+        db.close()
+
+
+try:
+    cleanup_orphaned_managed_containers_on_startup()
 except Exception as e:
-    logger.warning(f"Container cleanup skipped: {e}")
+    print(f"Container cleanup skipped: {e}")
 
 
 
@@ -263,20 +313,145 @@ def is_port_available(port: int, host: str = "0.0.0.0") -> bool:
             return False
 
 
+def _find_port_processes(port: int) -> list[int]:
+    commands: list[list[str]] = []
+    if os.name == "nt":
+        commands.append(["netstat", "-ano"])
+    else:
+        commands.extend([
+            ["lsof", "-ti", f"tcp:{port}"],
+            ["lsof", "-ti", f":{port}"],
+        ])
+
+    for command in commands:
+        if not shutil.which(command[0]):
+            continue
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, check=False)
+        except Exception:
+            continue
+
+        if os.name == "nt":
+            pids = []
+            for line in result.stdout.splitlines():
+                line = line.strip()
+                if f":{port}" not in line:
+                    continue
+                parts = line.split()
+                if len(parts) >= 5 and parts[0].upper() == "TCP" and parts[3].upper() == "LISTENING":
+                    try:
+                        pids.append(int(parts[-1]))
+                    except ValueError:
+                        continue
+            if pids:
+                return sorted(set(pids))
+            continue
+
+        pids = []
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                pids.append(int(line))
+            except ValueError:
+                continue
+        if pids:
+            return sorted(set(pids))
+
+    return []
+
+
+def _kill_processes_using_port(port: int) -> bool:
+    pids = _find_port_processes(port)
+    if not pids:
+        return False
+
+    if os.name == "nt":
+        for pid in pids:
+            try:
+                subprocess.run(["taskkill", "/PID", str(pid), "/F"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+        time.sleep(1)
+        return is_port_available(port)
+
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            continue
+
+    for _ in range(20):
+        if is_port_available(port):
+            return True
+        time.sleep(0.1)
+
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            continue
+
+    for _ in range(20):
+        if is_port_available(port):
+            return True
+        time.sleep(0.1)
+
+    return is_port_available(port)
+
+
+def _confirm_kill_port_process(port: int) -> bool:
+    pids = _find_port_processes(port)
+    if not pids:
+        return False
+
+    if not os.isatty(0):
+        print(f"Port {port} is already in use by PID(s): {', '.join(str(pid) for pid in pids)}; frontend dev server will not be started.")
+        return False
+
+    answer = input(
+        f"Port {port} is already in use by PID(s): {', '.join(str(pid) for pid in pids)}. "
+        f"Kill the process{'es' if len(pids) != 1 else ''} using port {port}? [y/N]: "
+    ).strip().lower()
+    if answer not in {"y", "yes"}:
+        print(f"Keeping existing process on port {port}; frontend dev server will not be started.")
+        return False
+
+    if not _kill_processes_using_port(port):
+        print(f"Failed to free port {port}; frontend dev server will not be started.")
+        return False
+
+    print(f"Freed port {port}; starting frontend dev server.")
+    return True
+
+
 def start_frontend_dev_server(frontend_dir: str, port: int = 3000) -> None:
     if not os.path.exists(frontend_dir):
-        logger.warning(f"Frontend directory not found: {frontend_dir}")
+        print(f"Frontend directory not found: {frontend_dir}")
         return
 
-    if not shutil.which("npm"):
-        logger.warning("npm not found: frontend dev server will not be started automatically.")
+    npm_executable = shutil.which("npm.cmd") if os.name == "nt" else None
+    if not npm_executable:
+        npm_executable = shutil.which("npm")
+
+    if not npm_executable:
+        print("npm not found: frontend dev server will not be started automatically.")
+        return
+
+    package_json = os.path.join(frontend_dir, "package.json")
+    if not os.path.exists(package_json):
+        print(f"package.json not found in frontend directory: {frontend_dir}")
         return
 
     if not is_port_available(port):
-        logger.warning(f"Port {port} is already in use; frontend dev server will not be started.")
-        return
+        if port == 3000 and not _confirm_kill_port_process(port):
+            return
+        if not is_port_available(port):
+            print(f"Port {port} is already in use; frontend dev server will not be started.")
+            return
 
-    npm_cmd = ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", str(port)]
+    npm_cmd = [npm_executable, "run", "dev", "--", "--host", "0.0.0.0", "--port", str(port)]
     popen_kwargs = {}
     if os.name == "posix":
         popen_kwargs["start_new_session"] = True
@@ -284,7 +459,7 @@ def start_frontend_dev_server(frontend_dir: str, port: int = 3000) -> None:
         popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
 
     try:
-        logger.info(f"Starting frontend dev server on port {port}...")
+        print(f"Starting frontend dev server on port {port}...")
         subprocess.Popen(
             npm_cmd,
             cwd=frontend_dir,
@@ -293,13 +468,33 @@ def start_frontend_dev_server(frontend_dir: str, port: int = 3000) -> None:
             stderr=subprocess.STDOUT,
             **popen_kwargs,
         )
-        logger.info(f"Started frontend dev server; open http://localhost:{port} or http://<this-machine-ip>:{port}")
+        print(f"Started frontend dev server; open http://localhost:{port} or http://<this-machine-ip>:{port}")
     except Exception as exc:
-        logger.warning(f"Failed to start frontend dev server: {exc}")
+        print(f"Failed to start frontend dev server: {exc}")
+
+
+def should_start_frontend_dev_server() -> bool:
+    env_force = os.getenv("ENDERPANEL_START_FRONTEND_DEV", "").strip().lower()
+    if env_force in {"1", "true", "yes", "on"}:
+        return True
+
+    env_disable = os.getenv("ENDERPANEL_DISABLE_FRONTEND_DEV", "").strip().lower()
+    if env_disable in {"1", "true", "yes", "on"}:
+        return False
+
+    if os.name == "nt":
+        return False
+
+    if os.path.exists(DIST_INDEX):
+        return False
+
+    return (
+        os.path.exists(FRONTEND_DIR)
+        and os.path.exists(os.path.join(FRONTEND_DIR, "package.json"))
+        and os.path.exists(os.path.join(FRONTEND_DIR, "src"))
+    )
 
 
 if __name__ == "__main__":
-    if not os.path.exists(DIST_DIR) and os.path.exists(FRONTEND_DIR):
-        start_frontend_dev_server(FRONTEND_DIR, 3000)
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

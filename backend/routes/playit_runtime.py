@@ -13,6 +13,7 @@ from config import PLAYIT_AGENT_IMAGE
 from database import get_db
 from models.server import Server
 from models.user import User
+from utils.docker_cleanup import remove_container_if_exists
 from utils.docker_client import get_docker_client
 from utils.security import get_current_user
 
@@ -68,7 +69,7 @@ def playit_container_running(server_id: int) -> bool:
 
 def stop_playit_container(server_id: int) -> None:
     try:
-        docker_client().containers.get(playit_container_name(server_id)).remove(force=True)
+        remove_container_if_exists(playit_container_name(server_id), stop_timeout=5)
     except DockerNotFound:
         pass
     except Exception:
@@ -132,19 +133,18 @@ def find_matching_tunnel(tunnels, tunnel_id: str | None, server_port: int):
 
 def call_agent_api(secret_key: str, path: str, body: dict | None = None) -> dict:
     try:
-        response = httpx.post(
-            f"{PLAYIT_API_BASE}{path}",
-            headers={
-                "Authorization": f"Agent-Key {secret_key.strip()}",
-                "Content-Type": "application/json",
-            },
-            json=body or {},
-            timeout=20,
-        )
+        with httpx.Client(timeout=20) as client:
+            response = client.post(
+                f"{PLAYIT_API_BASE}{path}",
+                headers={
+                    "Authorization": f"Agent-Key {secret_key.strip()}",
+                    "Content-Type": "application/json",
+                },
+                json=body or {},
+            )
+            text = response.text
     except httpx.HTTPError as exc:
         return {"ok": False, "detail": f"Failed to contact Playit agent API: {exc}"}
-
-    text = response.text
     try:
         parsed = response.json() if text else None
     except ValueError:
@@ -312,6 +312,19 @@ def build_payload(server: Server, user: User) -> dict:
     }
 
 
+def refresh_playit_tunnel_state(server: Server, user: User) -> tuple[str | None, str | None, str | None]:
+    if not server.playit_enabled or not user.playit_agent_secret:
+        return server.playit_tunnel_id, server.playit_domain, None
+
+    # If a tunnel already exists, we can refresh its public hostname from Playit
+    # even when the local sidecar is stopped. Creating a missing tunnel still
+    # requires the server to be running.
+    if server.playit_tunnel_id or server.status == "running":
+        return ensure_playit_tunnel(server, user)
+
+    return server.playit_tunnel_id, server.playit_domain, "Server needs to be started to make a tunnel."
+
+
 @router.get("/{server_id}/playit/runtime")
 def get_playit_runtime_status(
     server_id: int,
@@ -320,8 +333,8 @@ def get_playit_runtime_status(
 ):
     server = get_server_for_user(server_id, db, current_user)
     payload = build_payload(server, current_user)
-    if server.playit_enabled and current_user.playit_agent_secret and server.status == "running" and not server.playit_tunnel_id:
-        tunnel_id, domain, detail = ensure_playit_tunnel(server, current_user)
+    if server.playit_enabled and current_user.playit_agent_secret:
+        tunnel_id, domain, detail = refresh_playit_tunnel_state(server, current_user)
         if tunnel_id:
             server.playit_tunnel_id = tunnel_id
             server.playit_domain = domain
@@ -363,7 +376,10 @@ def link_playit_runtime(
             server.playit_tunnel_id = tunnel_id
             server.playit_domain = domain
     else:
-        tunnel_detail = "Server needs to be started to make a tunnel."
+        tunnel_id, domain, tunnel_detail = refresh_playit_tunnel_state(server, current_user)
+        if tunnel_id:
+            server.playit_tunnel_id = tunnel_id
+            server.playit_domain = domain
 
     db.commit()
 
@@ -390,19 +406,18 @@ def sync_playit_runtime(
             start_playit_container(server.id, current_user.playit_agent_secret)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Failed to sync local Playit agent: {exc}") from exc
-        tunnel_id, domain, tunnel_detail = ensure_playit_tunnel(server, current_user)
-        if tunnel_id:
-            server.playit_tunnel_id = tunnel_id
-            server.playit_domain = domain
-        db.commit()
-        payload = build_payload(server, current_user)
-        payload["tunnel_create_detail"] = tunnel_detail
-        payload["tunnel_created"] = bool(server.playit_tunnel_id)
-        return payload
     else:
         stop_playit_container(server.id)
 
-    return build_payload(server, current_user)
+    tunnel_id, domain, tunnel_detail = refresh_playit_tunnel_state(server, current_user)
+    if tunnel_id:
+        server.playit_tunnel_id = tunnel_id
+        server.playit_domain = domain
+    db.commit()
+    payload = build_payload(server, current_user)
+    payload["tunnel_create_detail"] = tunnel_detail
+    payload["tunnel_created"] = bool(server.playit_tunnel_id)
+    return payload
 
 
 @router.post("/{server_id}/playit/runtime/disconnect")

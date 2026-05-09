@@ -3,6 +3,8 @@ import axios from 'axios'
 
 axios.defaults.withCredentials = true
 
+let initPromise = null
+
 function loadStoredUser() {
   try {
     return JSON.parse(localStorage.getItem('user') || 'null')
@@ -51,20 +53,31 @@ export const useAuthStore = defineStore('auth', {
     },
     async init(force = false) {
       if (this.initialized && !force) {
-        return
+        return this.user
       }
 
-      try {
-        const res = await axios.get('/api/auth/me')
-        this.user = res.data
-        localStorage.setItem('user', JSON.stringify(this.user))
-      } catch {
-        this.user = null
-        localStorage.removeItem('user')
-      } finally {
-        localStorage.removeItem('token')
-        this.initialized = true
+      if (initPromise && !force) {
+        return initPromise
       }
+
+      initPromise = (async () => {
+        try {
+          const res = await axios.get('/api/auth/me')
+          this.user = res.data
+          localStorage.setItem('user', JSON.stringify(this.user))
+          return this.user
+        } catch {
+          this.user = null
+          localStorage.removeItem('user')
+          return null
+        } finally {
+          localStorage.removeItem('token')
+          this.initialized = true
+          initPromise = null
+        }
+      })()
+
+      return initPromise
     }
   }
 })

@@ -1,19 +1,13 @@
-import os
-import re
-import shutil
-import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import Optional
+from fastapi import Response
 from database import get_db
 from models.user import User
 from models.server import Server
-from utils.security import get_current_user, hash_password
-from utils.docker_client import get_docker_client
-from config import SERVERS_DIR
-
-logger = logging.getLogger(__name__)
+from utils.security import create_access_token, get_current_user, hash_password, set_auth_cookie
+from .servers import cleanup_server_runtime_artifacts, remove_server_dir
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -60,13 +54,13 @@ def get_user(user_id: int, db: Session = Depends(get_db), current_user: User = D
     }
 
 class UserUpdate(BaseModel):
-    username: Optional[str] = Field(default=None, min_length=3, max_length=50)
-    email: Optional[str] = Field(default=None, min_length=5, max_length=100)
-    password: Optional[str] = Field(default=None, min_length=8, max_length=128)
+    username: Optional[str] = None
+    email: Optional[str] = None
+    password: Optional[str] = None
     is_admin: Optional[bool] = None
 
 @router.put("/{user_id}")
-def update_user(user_id: int, data: UserUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def update_user(user_id: int, data: UserUpdate, response: Response, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not current_user.is_admin and current_user.id != user_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
@@ -93,6 +87,9 @@ def update_user(user_id: int, data: UserUpdate, db: Session = Depends(get_db), c
         user.is_admin = data.is_admin
 
     db.commit()
+    if current_user.id == user.id and data.username:
+        token = create_access_token({"sub": user.username})
+        set_auth_cookie(response, token)
     return {"status": "updated", "id": user.id}
 
 @router.delete("/{user_id}")
@@ -107,27 +104,14 @@ def delete_user(user_id: int, db: Session = Depends(get_db), current_user: User 
         raise HTTPException(status_code=404, detail="User not found")
 
     servers = db.query(Server).filter(Server.owner_id == user_id).all()
-    try:
-        docker = get_docker_client()
-    except Exception:
-        docker = None
-
     for server in servers:
-        # Stop and remove Docker containers before deleting server data
-        if docker:
-            for container_name in (f"mc-playit-{server.id}", f"mc-panel-{server.id}"):
-                try:
-                    c = docker.containers.get(container_name)
-                    c.remove(force=True)
-                except Exception as exc:
-                    logger.warning("Could not remove container %s during user deletion: %s", container_name, exc)
+        cleanup_server_runtime_artifacts(server.id)
+        from config import SERVERS_DIR
+        import os
+        import re
 
         server_dir = os.path.join(SERVERS_DIR, f"{server.id}-{re.sub(r'[^a-zA-Z0-9_-]', '_', server.name)}")
-        if os.path.exists(server_dir):
-            try:
-                shutil.rmtree(server_dir)
-            except Exception as exc:
-                logger.warning("Could not remove server dir %s: %s", server_dir, exc)
+        remove_server_dir(server_dir)
         db.delete(server)
 
     db.delete(user)

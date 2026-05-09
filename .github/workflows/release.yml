@@ -1,0 +1,71 @@
+name: Publish Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Prepare release files
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          STAGE_ROOT="$(mktemp -d)"
+          STAGE_DIR="$STAGE_ROOT/CoreFIles"
+          cp -R . "$STAGE_DIR"
+          printf '%s\n' "$VERSION" > "$STAGE_DIR/VERSION"
+          rm -rf \
+            "$STAGE_DIR/.git" \
+            "$STAGE_DIR/.github" \
+            "$STAGE_DIR/backend/avatars" \
+            "$STAGE_DIR/backend/servers" \
+            "$STAGE_DIR/frontend/node_modules" \
+            "$STAGE_DIR/frontend/.vite"
+          rm -f \
+            "$STAGE_DIR/.DS_Store" \
+            "$STAGE_DIR/backend/mcpanel.db" \
+            "$STAGE_DIR/backend/.secret_key" \
+            "$STAGE_DIR/backend/.data_encryption_key" \
+            "$STAGE_DIR/frontend/.env"
+          find "$STAGE_DIR" -name '.DS_Store' -delete
+          find "$STAGE_DIR" -name '__pycache__' -type d -prune -exec rm -rf {} +
+          find "$STAGE_DIR" -name '*.pyc' -delete
+          tar -czf "enderpanel-${VERSION}.tar.gz" -C "$STAGE_ROOT" CoreFIles
+          cp "enderpanel-${VERSION}.tar.gz" enderpanel-latest.tar.gz
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: EnderPanel/Releases
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          overwrite_files: true
+          token: ${{ secrets.RELEASES_REPO_TOKEN }}
+          files: |
+            enderpanel-*.tar.gz
+            enderpanel-latest.tar.gz

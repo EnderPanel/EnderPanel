@@ -3,7 +3,15 @@ import re
 import logging
 import httpx
 import asyncio
+import contextlib
 import shutil
+import docker
+import shlex
+import platform
+import subprocess
+import stat
+import time
+from datetime import datetime
 from docker.errors import NotFound as DockerNotFound
 from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
@@ -15,13 +23,21 @@ from models.server import Server
 from utils.security import get_current_user
 from config import SERVERS_DIR
 from .playit_runtime import ensure_playit_tunnel, start_playit_container, stop_playit_container
+from .sftp import cleanup_sftp_server_artifacts
 from utils.docker_client import get_docker_client
+from utils.docker_cleanup import IS_DOCKER_DESKTOP_HOST, remove_container_if_exists
 
 router = APIRouter(prefix="/api/servers", tags=["servers"])
 logger = logging.getLogger(__name__)
 
 IMAGE = "mc-panel-server"
 PREFIX = "mc-panel"
+HELPER_PREFIX = "mc-panel-helper"
+MANAGED_CONTAINER_PREFIXES = (
+    "mc-panel-",
+    "mc-playit-",
+    "mc-panel-sftp-",
+)
 FALLBACK_VERSIONS = {
     "paper": ["1.21.11", "1.21.10", "1.21.8", "1.20.6"],
     "vanilla": ["1.21.11", "1.21.10", "1.21.8", "1.20.6"],
@@ -49,16 +65,35 @@ def dc():
     return get_docker_client()
 
 
+def helper_container_name(purpose: str) -> str:
+    return f"{HELPER_PREFIX}-{purpose}-{os.getpid()}-{time.time_ns()}"
+
+
+def managed_container_server_id(container_name: str) -> int | None:
+    for prefix in MANAGED_CONTAINER_PREFIXES:
+        if container_name.startswith(prefix):
+            suffix = container_name[len(prefix):]
+            try:
+                return int(suffix)
+            except ValueError:
+                return None
+    return None
+
+
 def eula_file(sid: int, name: str) -> str:
     return os.path.join(sdir(sid, name), "eula.txt")
 
 
 def has_accepted_eula(sid: int, name: str) -> bool:
     path = eula_file(sid, name)
-    if os.path.exists(path):
+    if not os.path.exists(path):
+        return False
+    try:
         with open(path, "r", encoding="utf-8") as f:
             return "eula=true" in f.read().lower()
-    return False
+    except OSError as exc:
+        logger.warning("Could not read EULA file %s: %s", path, exc)
+        return False
 
 def java_version_for_mc(mc_version: str) -> int:
     try:
@@ -91,6 +126,139 @@ def server_properties_file(sid: int, name: str) -> str:
     return os.path.join(sdir(sid, name), "server.properties")
 
 
+def container_relative_path(path: str, root: str) -> str:
+    return os.path.relpath(path, root).replace("\\", "/")
+
+
+def find_unix_args(root: str) -> str | None:
+    ua_root = os.path.join(root, "unix_args.txt")
+    if os.path.exists(ua_root):
+        return ua_root
+
+    for root_dir, _dirs, files in os.walk(root):
+        if "unix_args.txt" in files and root_dir != root:
+            return os.path.join(root_dir, "unix_args.txt")
+    return None
+
+
+def version_sort_key(value: str) -> tuple[int, ...]:
+    parts = [int(part) for part in re.findall(r"\d+", value)]
+    return tuple(parts) if parts else (0,)
+
+
+def extract_forge_mc_version(value: str) -> str | None:
+    if not value:
+        return None
+    mc_ver = value.split("-", 1)[0].strip()
+    if not re.fullmatch(r"\d+(?:\.\d+){1,3}", mc_ver):
+        return None
+    return mc_ver
+
+
+def extract_neoforge_mc_version(value: str) -> str | None:
+    if not value:
+        return None
+    parts = value.split(".")
+    if len(parts) < 2 or not all(part.isdigit() for part in parts[:2]):
+        return None
+    return f"1.{parts[0]}.{parts[1]}"
+
+
+def unique_versions_desc(values: list[str]) -> list[str]:
+    deduped = {value for value in values if value}
+    return sorted(deduped, key=version_sort_key, reverse=True)
+
+
+def remove_server_dir(path: str) -> None:
+    if not os.path.exists(path):
+        return
+
+    def _clear_readonly(func, target, _exc_info):
+        try:
+            os.chmod(target, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
+        except OSError:
+            pass
+        func(target)
+
+    def _remove_with_docker() -> bool:
+        parent = os.path.dirname(os.path.abspath(path))
+        name = os.path.basename(path)
+        try:
+            dc().containers.run(
+                f"{IMAGE}:latest",
+                name=helper_container_name("server-rm"),
+                command=["sh", "-lc", 'rm -rf "/target/$TARGET_NAME"'],
+                environment={"TARGET_NAME": name},
+                remove=True,
+                labels={"enderpanel.helper": "true", "enderpanel.purpose": "server-rm"},
+                volumes={parent: {"bind": "/target", "mode": "rw"}},
+            )
+            return not os.path.exists(path)
+        except Exception as exc:
+            logger.warning("Docker-assisted server dir cleanup failed for %s: %s", path, exc)
+            return False
+
+    def _remove_with_platform_command() -> bool:
+        system = platform.system()
+        try:
+            if system == "Windows":
+                subprocess.run(["cmd", "/c", "rmdir", "/s", "/q", path], check=False)
+            elif system == "Darwin":
+                subprocess.run(["rm", "-rf", path], check=False)
+            else:
+                subprocess.run(["rm", "-rf", path], check=False)
+        except Exception as exc:
+            logger.warning("Platform cleanup command failed for %s: %s", path, exc)
+        return not os.path.exists(path)
+
+    try:
+        shutil.rmtree(path, onerror=_clear_readonly if os.name == "nt" else None)
+        return
+    except (PermissionError, OSError) as exc:
+        logger.warning("Standard server dir cleanup failed for %s: %s", path, exc)
+
+    if IS_DOCKER_DESKTOP_HOST:
+        if _remove_with_docker() or _remove_with_platform_command():
+            return
+    else:
+        if _remove_with_platform_command() or _remove_with_docker():
+            return
+
+    if platform.system() != "Windows":
+        subprocess.run(["sudo", "rm", "-rf", path], check=False)
+        if not os.path.exists(path):
+            return
+
+    raise PermissionError(f"Could not remove server directory {path}")
+
+
+def cleanup_server_runtime_artifacts(server_id: int) -> None:
+    try:
+        remove_container_if_exists(cname(server_id), stop_timeout=10)
+    except Exception as exc:
+        logger.warning("Failed to remove server container %s: %s", cname(server_id), exc)
+
+    stop_playit_container(server_id)
+    cleanup_sftp_server_artifacts(server_id)
+
+
+def cleanup_orphaned_sftp_state(valid_ids: set[int]) -> list[str]:
+    removed_states: list[str] = []
+    try:
+        for entry in os.listdir(os.path.dirname(SERVERS_DIR)):
+            match = re.fullmatch(r"sftp_state_(\d+)\.json", entry)
+            if not match:
+                continue
+            server_id = int(match.group(1))
+            if server_id in valid_ids:
+                continue
+            cleanup_sftp_server_artifacts(server_id)
+            removed_states.append(entry)
+    except Exception as exc:
+        logger.warning("Failed to clean orphaned SFTP state files: %s", exc)
+    return removed_states
+
+
 def ensure_server_properties(sid: int, name: str, port: int, max_players: int, motd: str) -> None:
     path = server_properties_file(sid, name)
     existing: dict[str, str] = {}
@@ -106,8 +274,7 @@ def ensure_server_properties(sid: int, name: str, port: int, max_players: int, m
 
     existing["server-port"] = str(port)
     existing["max-players"] = str(max_players)
-    # Strip newlines from motd to prevent server.properties injection
-    existing["motd"] = motd.replace("\r", "").replace("\n", " ")
+    existing["motd"] = motd
     existing["enable-rcon"] = "false"
     existing["broadcast-rcon-to-ops"] = "false"
     existing["rcon.port"] = "25575"
@@ -139,7 +306,7 @@ def get_status(sid: int) -> str:
         return "running" if c.status == "running" else "stopped"
     except DockerNotFound:
         return "stopped"
-    except Exception:
+    except:
         return "stopped"
 
 
@@ -173,12 +340,6 @@ class Create(BaseModel):
         if not sanitize(value).strip("_"):
             raise ValueError("Server name must contain letters, numbers, hyphens, or underscores")
         return value
-
-    @field_validator("motd")
-    @classmethod
-    def validate_motd(cls, value: str) -> str:
-        # Strip newlines to prevent server.properties injection
-        return value.replace("\r", "").replace("\n", " ")
 
     @field_validator("server_type")
     @classmethod
@@ -244,20 +405,15 @@ async def download_jar(stype: str, ver: str, path: str) -> tuple[bool, str | Non
                     if r.status_code != 200:
                         return False, f"NeoForge installer download failed with status {r.status_code}."
 
-                    tmp = os.path.join(path, "neoforge-installer.jar")
-                    with open(tmp, "wb") as f: f.write(r.content)
-                    proc = await asyncio.create_subprocess_exec(
-                        "docker", "run", "--rm", "-v", f"{path}:/server", "-w", "/server",
-                        image_for_mc(ver), "/opt/java/openjdk/bin/java",
-                        "-jar", "neoforge-installer.jar", "--installServer", "--server.jar",
-                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-                    await proc.communicate()
-                    os.remove(tmp)
+                    installer = os.path.join(path, "neoforge-installer.jar")
+                    with open(installer, "wb") as f:
+                        f.write(r.content)
 
-                    if os.path.exists(os.path.join(path, "server.jar")):
+                    if os.path.exists(installer) and os.path.getsize(installer) > 50000:
                         return True, None
+                    return False, "NeoForge installer downloaded, but the file looks incomplete."
                 except Exception as e:
-                    logger.warning(f"NeoForge download error: {e}")
+                    print(f"NeoForge download error: {e}")
                     return False, f"NeoForge download error: {e}"
             elif stype == "forge":
                 try:
@@ -265,41 +421,86 @@ async def download_jar(stype: str, ver: str, path: str) -> tuple[bool, str | Non
                     import xml.etree.ElementTree as ET
                     root = ET.fromstring(r.text)
                     versions = root.findall(".//version")
-                    matching = [v.text for v in versions if v.text and v.text.startswith(ver)]
+                    matching = [
+                        v.text for v in versions
+                        if v.text and extract_forge_mc_version(v.text) == ver
+                    ]
                     if not matching:
                         return False, f"No Forge builds found for {ver}."
-                    
-                    forge_ver = matching[-1]
+
+                    forge_ver = sorted(matching, key=version_sort_key)[-1]
                     installer_url = f"https://maven.minecraftforge.net/net/minecraftforge/forge/{forge_ver}/forge-{forge_ver}-installer.jar"
                     r = await c.get(installer_url)
                     
                     if r.status_code != 200:
                         return False, f"Forge installer download failed with status {r.status_code}."
-                        
-                    tmp = os.path.join(path, "forge-installer.jar")
-                    with open(tmp, "wb") as f: f.write(r.content)
-                    proc = await asyncio.create_subprocess_exec(
-                        "docker", "run", "--rm", "-v", f"{path}:/server", "-w", "/server",
-                        image_for_mc(ver), "/opt/java/openjdk/bin/java",
-                        "-jar", "forge-installer.jar", "--installServer",
-                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-                    await proc.communicate()
-                    os.remove(tmp)
-                    
-                    if os.path.exists(os.path.join(path, "libraries")):
+
+                    installer = os.path.join(path, "forge-installer.jar")
+                    with open(installer, "wb") as f:
+                        f.write(r.content)
+
+                    if os.path.exists(installer) and os.path.getsize(installer) > 50000:
                         return True, None
-                    return False, "Forge installer completed, but expected libraries were not created."
+                    return False, "Forge installer downloaded, but the file looks incomplete."
                 except Exception as e:
-                    logger.warning(f"Forge download error: {e}")
+                    print(f"Forge download error: {e}")
                     return False, f"Forge download error: {e}"
     except Exception as e:
-        logger.warning(f"Download error: {e}")
+        print(f"Download error: {e}")
         return False, f"Download error: {e}"
 
     return False, f"Unsupported server type or installer failed for {stype} {ver}."
 
+
+async def ensure_modded_server_layout(server: Server, path: str) -> tuple[bool, str | None]:
+    if server.server_type not in {"forge", "neoforge"}:
+        return True, None
+
+    if find_unix_args(path):
+        return True, None
+
+    installer_name = "neoforge-installer.jar" if server.server_type == "neoforge" else "forge-installer.jar"
+    installer_path = os.path.join(path, installer_name)
+    if not os.path.exists(installer_path):
+        return False, f"Missing {installer_name}. Recreate the server to download the installer again."
+
+    proc = None
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "docker", "run", "--rm",
+            "-v", f"{path}:/server",
+            "-w", "/server",
+            image_for_mc(server.version),
+            "/opt/java/openjdk/bin/java",
+            "-jar", installer_name,
+            "--installServer",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
+    except asyncio.TimeoutError:
+        if proc is not None:
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
+            await proc.communicate()
+        return False, f"{server.server_type.capitalize()} installer timed out. Please try starting the server again."
+    except Exception as exc:
+        return False, f"{server.server_type.capitalize()} installer failed to start: {exc}"
+
+    if proc.returncode != 0:
+        detail = (stderr or stdout).decode("utf-8", errors="replace").strip()
+        return False, detail or f"{server.server_type.capitalize()} installer exited with code {proc.returncode}."
+
+    if find_unix_args(path):
+        return True, None
+
+    if server.server_type == "forge" and os.path.exists(os.path.join(path, "libraries")):
+        return True, None
+
+    return False, f"{server.server_type.capitalize()} installer finished, but no launch files were created."
+
 @router.get("/versions/{server_type}")
-async def get_versions(server_type: str, _user: User = Depends(get_current_user)):
+async def get_versions(server_type: str):
     server_type = server_type.strip().lower()
     if server_type not in ALLOWED_SERVER_TYPES:
         raise HTTPException(status_code=400, detail="Unsupported server type")
@@ -327,29 +528,23 @@ async def get_versions(server_type: str, _user: User = Depends(get_current_user)
                 import xml.etree.ElementTree as ET
                 root = ET.fromstring(r.text)
                 all_versions = [v.text for v in root.findall(".//version") if v.text]
-                seen = set()
-                for v in all_versions:
-                    mc_ver = v.rsplit("-", 1)[0] if "-" in v else v
-                    if mc_ver not in seen:
-                        seen.add(mc_ver)
-                        versions.append(mc_ver)
-                versions.reverse()
+                versions = unique_versions_desc([
+                    mc_ver
+                    for mc_ver in (extract_forge_mc_version(v) for v in all_versions)
+                    if mc_ver
+                ])
             elif server_type == "neoforge":
                 r = await c.get("https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml")
                 import xml.etree.ElementTree as ET
                 root = ET.fromstring(r.text)
                 all_versions = [v.text for v in root.findall(".//version") if v.text]
-                seen = set()
-                for v in all_versions:
-                    parts = v.split(".")
-                    if len(parts) >= 2:
-                        mc_ver = f"1.{parts[0]}.{parts[1]}"
-                        if mc_ver not in seen:
-                            seen.add(mc_ver)
-                            versions.append(mc_ver)
-                versions.reverse()
+                versions = unique_versions_desc([
+                    mc_ver
+                    for mc_ver in (extract_neoforge_mc_version(v) for v in all_versions)
+                    if mc_ver
+                ])
     except Exception as e:
-        logger.warning(f"Error fetching {server_type} versions: {e}")
+        print(f"Error fetching {server_type} versions: {e}")
         detail = str(e)
 
     if not versions:
@@ -390,28 +585,15 @@ async def create_server(data: Create, db: Session = Depends(get_db), user: User 
     s = Server(name=data.name, owner_id=user.id, server_type=data.server_type, port=port,
         max_players=data.max_players, version=data.version, motd=data.motd, ram_min=data.ram_min,
         ram_max=data.ram_max, swap_mb=data.swap_mb, cpu_cores=data.cpu_cores,
-        custom_launch_command=data.custom_launch_command)
+        custom_launch_command=data.custom_launch_command, created_at=datetime.utcnow())
     db.add(s); db.commit(); db.refresh(s)
     d = sdir(s.id, s.name)
+    remove_server_dir(d)
     os.makedirs(d, exist_ok=True)
     with open(os.path.join(d, "eula.txt"), "w", encoding="utf-8") as f:
         f.write("eula=false\n")
     ensure_server_properties(s.id, s.name, port, data.max_players, data.motd)
     ok, download_error = await download_jar(data.server_type, data.version, d)
-    try:
-        client = dc()
-        base = os.path.dirname(os.path.dirname(__file__))
-        for tag, dockerfile in [("latest", "Dockerfile"), ("java17", "Dockerfile.java17"), ("java11", "Dockerfile.java11")]:
-            try: client.images.get(f"{IMAGE}:{tag}")
-            except Exception:
-                try: client.images.build(path=base, tag=f"{IMAGE}:{tag}", dockerfile=dockerfile)
-                except Exception as e:
-                    logger.warning(f"Could not build Docker image {tag}: {e}")
-    except Exception as e:
-        if "Permission denied" in str(e):
-            logger.warning("Docker permission denied - user may not be in docker group")
-        else:
-            logger.warning(f"Could not access Docker: {e}")
     r = to_dict(s); r["jar_downloaded"] = ok; r["download_error"] = download_error
     if port_changed:
         r["port_changed"] = True
@@ -453,32 +635,7 @@ async def start_server(
         c = client.containers.get(name)
         if c.status == "running":
             raise HTTPException(400, "Already running")
-        correct_image = image_for_mc(s.version)
-        container_image = (c.image.tags or [""])[0]
-        if correct_image != container_image:
-            c.remove(force=True)
-        else:
-            if not has_accepted_eula(sid, s.name):
-                if data and data.accept_eula:
-                    write_eula_accept(sid, s.name)
-                else:
-                    raise HTTPException(400, "EULA acceptance required")
-            c.start()
-            s.status = "running"
-            db.commit()
-            if s.playit_enabled and user.playit_agent_secret:
-                try:
-                    start_playit_container(s.id, user.playit_agent_secret)
-                    tunnel_id, domain, detail = ensure_playit_tunnel(s, user)
-                    if tunnel_id:
-                        s.playit_tunnel_id = tunnel_id
-                        s.playit_domain = domain
-                        db.commit()
-                    elif detail:
-                        logger.warning("Playit tunnel failed for server %s: %s", s.id, detail)
-                except Exception as exc:
-                    logger.warning("Playit agent failed for server %s: %s", s.id, exc)
-            return {"status": "started"}
+        remove_container_if_exists(name, stop_timeout=5)
     except DockerNotFound:
         pass
     except HTTPException:
@@ -487,57 +644,54 @@ async def start_server(
     d = sdir(sid, s.name)
     ensure_server_properties(sid, s.name, s.port, s.max_players, s.motd)
 
-    # Ensure the correct image is built
-    base = os.path.dirname(os.path.dirname(__file__))
-    for tag, dockerfile in [("latest", "Dockerfile"), ("java17", "Dockerfile.java17"), ("java11", "Dockerfile.java11")]:
-        try: client.images.get(f"{IMAGE}:{tag}")
-        except Exception:
-            try: client.images.build(path=base, tag=f"{IMAGE}:{tag}", dockerfile=dockerfile)
-            except Exception as e:
-                logger.warning(f"Could not build Docker image {tag}: {e}")
-
     if not has_accepted_eula(sid, s.name):
         if data and data.accept_eula:
             write_eula_accept(sid, s.name)
         else:
             raise HTTPException(400, "EULA acceptance required")
+
+    ok, install_error = await ensure_modded_server_layout(s, d)
+    if not ok:
+        raise HTTPException(status_code=400, detail=install_error or "Failed to prepare server files")
+
+    # Ensure the correct image is built
+    base = os.path.dirname(os.path.dirname(__file__))
+    for tag, dockerfile in [("latest", "Dockerfile"), ("java17", "Dockerfile.java17"), ("java11", "Dockerfile.java11")]:
+        try: client.images.get(f"{IMAGE}:{tag}")
+        except:
+            try: client.images.build(path=base, tag=f"{IMAGE}:{tag}", dockerfile=dockerfile)
+            except Exception as e:
+                logger.warning(f"Could not build Docker image {tag}: {e}")
     
     java = java_cmd(s.version)
     if s.custom_launch_command:
         cmd = s.custom_launch_command.replace("{jar}", "server.jar").replace("{ram_min}", str(s.ram_min))
-        cmd = cmd.replace("{ram_max}", str(s.ram_max)).replace("{java}", java).split()
+        cmd = shlex.split(cmd.replace("{ram_max}", str(s.ram_max)).replace("{java}", java))
     else:
-        unix_args = None
-        ua_root = os.path.join(d, "unix_args.txt")
-        if os.path.exists(ua_root):
-            unix_args = ua_root
-        else:
-            for root_dir, dirs, files in os.walk(d):
-                if "unix_args.txt" in files and root_dir != d:
-                    unix_args = os.path.join(root_dir, "unix_args.txt")
-                    break
+        unix_args = find_unix_args(d)
 
         server_jar = os.path.join(d, "server.jar")
-        has_server_jar = os.path.exists(server_jar) and os.path.getsize(server_jar) > 50000
+        has_server_jar = (
+            os.path.exists(server_jar)
+            and os.path.isfile(server_jar)
+            and os.access(server_jar, os.R_OK)
+            and os.path.getsize(server_jar) > 50000
+        )
 
-        if has_server_jar and unix_args:
+        if unix_args:
             with open(os.path.join(d, "user_jvm_args.txt"), "w") as f:
                 f.write(f"-Xmx{s.ram_max}M\n-Xms{s.ram_min}M\n-XX:+UseG1GC\n")
-            ua_rel = os.path.relpath(unix_args, d)
-            cmd = [java, "@user_jvm_args.txt", f"@{ua_rel}", "-jar", "server.jar", "nogui"]
+            ua_rel = container_relative_path(unix_args, d)
+            # Forge/NeoForge installers generate unix_args.txt with the correct launch entrypoint.
+            cmd = [java, "@user_jvm_args.txt", f"@{ua_rel}", "nogui"]
         elif has_server_jar:
             cmd = [java, f"-Xmx{s.ram_max}M", f"-Xms{s.ram_min}M", "-jar", "server.jar", "nogui"]
-        elif unix_args:
-            with open(os.path.join(d, "user_jvm_args.txt"), "w") as f:
-                f.write(f"-Xmx{s.ram_max}M\n-Xms{s.ram_min}M\n-XX:+UseG1GC\n")
-            ua_rel = os.path.relpath(unix_args, d)
-            cmd = [java, "@user_jvm_args.txt", f"@{ua_rel}", "nogui"]
         else:
             raise HTTPException(400, "No server files found")
 
     # Always clean up any leftover container before creating
     try:
-        client.containers.get(name).remove(force=True)
+        remove_container_if_exists(name, stop_timeout=5)
     except DockerNotFound:
         pass
 
@@ -549,7 +703,7 @@ async def start_server(
         tty=True,
         stdin_open=True,
         volumes={d: {"bind": "/server", "mode": "rw"}},
-        ports={"25565/tcp": s.port},
+        ports={"25565/tcp": s.port, "25575/tcp": 25575 + s.id},
         mem_limit=f"{s.ram_max}m",
         memswap_limit=f"{s.ram_max + s.swap_mb}m",
         cpu_period=100000,
@@ -602,7 +756,7 @@ def stop_server(sid: int, db: Session = Depends(get_db), user: User = Depends(ge
     except DockerNotFound:
         pass
     except Exception as e:
-        logger.warning(f"Stop error: {e}")
+        print(f"Stop error: {e}")
     
     s.status = "stopped"
     db.commit()
@@ -618,31 +772,11 @@ async def restart_server(sid: int, db: Session = Depends(get_db), user: User = D
 async def delete_server(sid: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     s = db.query(Server).filter(Server.id == sid, Server.owner_id == user.id).first()
     if not s: raise HTTPException(404, "Not found")
-    
-    try:
-        c = dc().containers.get(cname(sid))
-        c.kill()
-        c.remove(force=True)
-    except Exception: pass
-    d = sdir(sid, s.name)
-    if os.path.exists(d):
-        try:
-            shutil.rmtree(d)
-        except PermissionError:
-            # Try Docker-based removal for files owned by the container user
-            try:
-                parent = os.path.dirname(os.path.abspath(d))
-                name = os.path.basename(d)
-                dc().containers.run(
-                    IMAGE + ":latest",
-                    command=["rm", "-rf", f"/target/{name}"],
-                    remove=True,
-                    volumes={parent: {"bind": "/target", "mode": "rw"}},
-                )
-            except Exception as rm_err:
-                logger.warning(f"Could not remove server directory {d}: {rm_err}")
 
-    stop_playit_container(s.id)
+    cleanup_server_runtime_artifacts(sid)
+    d = sdir(sid, s.name)
+    remove_server_dir(d)
+
     db.delete(s)
     db.commit()
 
@@ -707,15 +841,19 @@ def cleanup_containers(db: Session = Depends(get_db), current_user: User = Depen
     removed = []
     try:
         for c in dc().containers.list(all=True):
-            if c.name.startswith("mc-panel-"):
-                try:
-                    cid = int(c.name.replace("mc-panel-", ""))
-                    if cid not in valid_ids:
-                        c.kill()
-                        c.remove(force=True)
-                        removed.append(c.name)
-                except Exception:
-                    pass
-    except Exception:
-        pass
+            cid = managed_container_server_id(c.name)
+            if cid is None or cid in valid_ids:
+                continue
+
+            try:
+                if c.name.startswith("mc-panel-sftp-"):
+                    cleanup_sftp_server_artifacts(cid)
+                else:
+                    remove_container_if_exists(c.name, stop_timeout=5)
+                removed.append(c.name)
+            except Exception as exc:
+                logger.warning("Failed to remove orphaned managed container %s: %s", c.name, exc)
+    except Exception as exc:
+        logger.warning("Managed container cleanup failed: %s", exc)
+    removed.extend(cleanup_orphaned_sftp_state(valid_ids))
     return {"removed": removed}

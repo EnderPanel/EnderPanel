@@ -17,41 +17,136 @@ if (-not $isAdmin) {
 }
 
 $ErrorActionPreference = "Stop"
-$InstallDir = "$env:LOCALAPPDATA\EnderPanel"
+$InstallDir = Join-Path $env:USERPROFILE "EnderPanel"
+$ReleaseVersion = "__RELEASE_VERSION__"
+$ReleaseUrl = "https://enderpanel.space/releases/latest.tar.gz?v=$ReleaseVersion"
+
+function Refresh-Path {
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+}
+
+function Resolve-CommandPath {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$Candidates
+    )
+
+    foreach ($Candidate in $Candidates) {
+        $Command = Get-Command $Candidate -ErrorAction SilentlyContinue
+        if ($Command -and $Command.Source) {
+            return $Command.Source
+        }
+    }
+
+    return $null
+}
+
+function Install-DownloadedExe {
+    param(
+        [Parameter(Mandatory = $true)][string]$Url,
+        [Parameter(Mandatory = $true)][string]$FileName,
+        [Parameter(Mandatory = $true)][string[]]$Arguments
+    )
+
+    $DownloadPath = Join-Path $env:TEMP $FileName
+    Invoke-WebRequest -Uri $Url -OutFile $DownloadPath
+    try {
+        $Process = Start-Process -FilePath $DownloadPath -ArgumentList $Arguments -Wait -PassThru
+        if ($Process.ExitCode -ne 0) {
+            throw "Installer exited with code $($Process.ExitCode)"
+        }
+    } finally {
+        Remove-Item $DownloadPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Install-DownloadedMsi {
+    param(
+        [Parameter(Mandatory = $true)][string]$Url,
+        [Parameter(Mandatory = $true)][string]$FileName,
+        [string[]]$ExtraArguments = @()
+    )
+
+    $DownloadPath = Join-Path $env:TEMP $FileName
+    Invoke-WebRequest -Uri $Url -OutFile $DownloadPath
+    try {
+        $Arguments = @("/i", "`"$DownloadPath`"", "/qn", "/norestart") + $ExtraArguments
+        $Process = Start-Process -FilePath "msiexec.exe" -ArgumentList $Arguments -Wait -PassThru
+        if ($Process.ExitCode -ne 0) {
+            throw "Installer exited with code $($Process.ExitCode)"
+        }
+    } finally {
+        Remove-Item $DownloadPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-JavaInstall {
+    param(
+        [Parameter(Mandatory = $true)][int]$MajorVersion
+    )
+
+    $patterns = @(
+        (Join-Path $env:ProgramFiles "Eclipse Adoptium\jdk-$MajorVersion*"),
+        (Join-Path $env:ProgramFiles "AdoptOpenJDK\jdk-$MajorVersion*")
+    )
+
+    if ($MajorVersion -eq 8) {
+        $patterns += (Join-Path $env:ProgramFiles "Java\jdk1.8*")
+    }
+
+    foreach ($pattern in $patterns) {
+        if (Get-ChildItem -Path $pattern -Directory -ErrorAction SilentlyContinue | Select-Object -First 1) {
+            return $true
+        }
+    }
+
+    return $false
+}
 
 # Install Python
 Write-Host "Checking Python..." -ForegroundColor Cyan
 try { python --version *>$null } catch {
     Write-Host "Installing Python 3.12.9..." -ForegroundColor Yellow
-    winget install Python.Python.3.12 --version 3.12.9 --accept-package-agreements --accept-source-agreements
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+    Install-DownloadedExe `
+        -Url "https://www.python.org/ftp/python/3.12.9/python-3.12.9-amd64.exe" `
+        -FileName "python-3.12.9-amd64.exe" `
+        -Arguments @("/quiet", "InstallAllUsers=1", "PrependPath=1", "Include_test=0")
+    Refresh-Path
 }
 
 # Install Node.js
 Write-Host "Checking Node.js..." -ForegroundColor Cyan
 try { node --version *>$null } catch {
     Write-Host "Installing Node.js 20 LTS..." -ForegroundColor Yellow
-    winget install OpenJS.NodeJS.LTS --version 20.19.0 --accept-package-agreements --accept-source-agreements
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+    Install-DownloadedMsi `
+        -Url "https://nodejs.org/dist/v20.19.0/node-v20.19.0-x64.msi" `
+        -FileName "node-v20.19.0-x64.msi"
+    Refresh-Path
 }
 
 # Install Java
-Write-Host "Checking Java..." -ForegroundColor Cyan
-try { java -version *>$null } catch {
-    Write-Host "Installing Java 21 LTS..." -ForegroundColor Yellow
-    winget install EclipseAdoptium.Temurin.21.JDK --version 21.0.6.7 --accept-package-agreements --accept-source-agreements
+Write-Host "Checking Java installations..." -ForegroundColor Cyan
+foreach ($JavaVersion in 8, 17, 21) {
+    if (-not (Test-JavaInstall -MajorVersion $JavaVersion)) {
+        Write-Host "Installing Java $JavaVersion..." -ForegroundColor Yellow
+        Install-DownloadedMsi `
+            -Url "https://api.adoptium.net/v3/installer/latest/$JavaVersion/ga/windows/x64/jdk/hotspot/normal/eclipse?project=jdk" `
+            -FileName "OpenJDK${JavaVersion}U-jdk_x64_windows_hotspot.msi"
+    } else {
+        Write-Host "Java $JavaVersion found." -ForegroundColor Green
+    }
 }
+Refresh-Path
 
-# Install Docker
-Write-Host "Checking Docker..." -ForegroundColor Cyan
+# Install Docker Desktop
+Write-Host "Checking Docker Desktop..." -ForegroundColor Cyan
 try { docker --version *>$null } catch {
     Write-Host "Please install Docker Desktop from https://docker.com" -ForegroundColor Red
     Start-Process "https://www.docker.com/products/docker-desktop/"
     Read-Host "Press Enter after installing Docker Desktop"
 }
-# Configure Docker RAM allocation (Windows via WSL2)
+# Configure Docker Desktop RAM allocation (Windows via WSL2)
 Write-Host ""
-Write-Host "Configuring Docker RAM allocation..." -ForegroundColor Cyan
+Write-Host "Configuring Docker Desktop RAM allocation..." -ForegroundColor Cyan
 
 $TotalRAM = (Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum
 $TotalRAM_GB = [math]::Round($TotalRAM / 1GB, 1)
@@ -82,7 +177,7 @@ Write-Host "Downloading EnderPanel..." -ForegroundColor Cyan
 $TarPath = "$env:TEMP\enderpanel-latest.tar.gz"
 $TmpDir = "$env:TEMP\EnderPanel-upgrade"
 try {
-    Invoke-WebRequest -Uri "https://enderpanel.space/releases/latest.tar.gz" -OutFile $TarPath
+    Invoke-WebRequest -Uri $ReleaseUrl -OutFile $TarPath
     if (Test-Path $TmpDir) { Remove-Item -Recurse -Force $TmpDir }
     New-Item -ItemType Directory -Force -Path $TmpDir | Out-Null
     tar -xzf $TarPath -C $TmpDir
@@ -124,26 +219,33 @@ pip install -r requirements.txt
 
 Write-Host "Installing Node dependencies..." -ForegroundColor Cyan
 Set-Location "$InstallDir\frontend"
-npm install
+$NpmCmd = Resolve-CommandPath @("npm.cmd", "npm")
+if (-not $NpmCmd) {
+    throw "npm was not found after installation."
+}
+& $NpmCmd install
+if ($LASTEXITCODE -ne 0) {
+    throw "npm install failed with exit code $LASTEXITCODE"
+}
 
 # Build frontend
 Write-Host "Building frontend..." -ForegroundColor Cyan
-npx vite build
+$NpxCmd = Resolve-CommandPath @("npx.cmd", "npx")
+if (-not $NpxCmd) {
+    throw "npx was not found after Node.js installation."
+}
+& $NpxCmd vite build
+if ($LASTEXITCODE -ne 0) {
+    throw "npx vite build failed with exit code $LASTEXITCODE"
+}
+if (-not (Test-Path "$InstallDir\frontend\dist\index.html")) {
+    throw "Frontend build did not create frontend\\dist\\index.html"
+}
 
 # Build Docker image
 Write-Host "Building Docker image..." -ForegroundColor Cyan
 Set-Location "$InstallDir\backend"
 docker build -t mc-panel-server:latest .
-
-# Create desktop shortcut
-Write-Host "Creating shortcuts..." -ForegroundColor Cyan
-$WshShell = New-Object -ComObject WScript.Shell
-$Shortcut = $WshShell.CreateShortcut("$env:USERPROFILE\Desktop\EnderPanel.lnk")
-$Shortcut.TargetPath = "powershell.exe"
-$StartCmd = "Set-Location '$InstallDir\backend'; python main.py 2>&1 | Tee-Object -FilePath '$InstallDir\enderpanel.log' -Append"
-$Shortcut.Arguments = "-NoExit -Command `"$StartCmd`""
-$Shortcut.IconLocation = "$InstallDir\electron\icon.png"
-$Shortcut.Save()
 
 Write-Host ""
 Write-Host "=== Installation Complete ===" -ForegroundColor Green
@@ -152,11 +254,12 @@ Write-Host "To start EnderPanel:" -ForegroundColor White
 Write-Host "  cd '$InstallDir\backend'" -ForegroundColor Gray
 Write-Host "  python main.py" -ForegroundColor Gray
 Write-Host ""
-Write-Host "Then open http://localhost:3000" -ForegroundColor White
+Write-Host "Then open http://localhost:8000" -ForegroundColor White
 Write-Host ""
 
 $start = Read-Host "Start EnderPanel now? (y/n)"
 if ($start -eq "y") {
     Set-Location "$InstallDir\backend"
+    $env:ENDERPANEL_DISABLE_FRONTEND_DEV = "1"
     python main.py
 }

@@ -560,16 +560,15 @@
 
       <div v-show="activeTab === 'playit'">
         <div class="space-y-6">
-          <div class="rounded-2xl border border-blue-200/70 dark:border-blue-500/20 bg-gradient-to-br from-blue-50/80 via-sky-50/60 to-white dark:from-blue-500/10 dark:via-sky-500/5 dark:to-transparent p-6">
-            <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-              <div class="flex items-start gap-3">
+          <div class="rounded-2xl border border-blue-200/70 dark:border-blue-500/20 bg-gradient-to-br from-blue-50/80 via-sky-50/60 to-white dark:from-blue-500/10 dark:via-sky-500/5 dark:to-transparent p-6 dqs-playit-intro">
+            <div class="flex items-start gap-3">
                 <div class="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-300 flex-shrink-0">
                   <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
                   </svg>
                 </div>
                 <div class="space-y-2">
-                  <div class="flex flex-wrap items-center gap-2">
+                  <div class="flex flex-wrap items-center gap-2 dqs-playit-title-row">
                     <h3 class="text-lg font-semibold">Playit Integration</h3>
                     <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-white/70 dark:bg-white/10 text-blue-700 dark:text-blue-200 border border-blue-200/70 dark:border-blue-400/20">
                       Unofficial integration
@@ -583,28 +582,6 @@
                   </p>
                 </div>
               </div>
-
-              <div class="grid gap-3 sm:grid-cols-3 lg:min-w-[360px]">
-                <div class="rounded-xl bg-white/80 dark:bg-white/5 border border-blue-100 dark:border-white/10 px-4 py-3">
-                  <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400">Link status</p>
-                  <p class="mt-1 font-semibold" :class="playitStatus.linked ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-800 dark:text-gray-100'">
-                    {{ playitStatus.linked ? 'Linked' : 'Not linked' }}
-                  </p>
-                </div>
-                <div class="rounded-xl bg-white/80 dark:bg-white/5 border border-blue-100 dark:border-white/10 px-4 py-3">
-                  <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400">Tunnel</p>
-                  <p class="mt-1 font-semibold" :class="playitStatus.tunnel_created ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'">
-                    {{ playitStatus.tunnel_created ? 'Created' : 'Pending' }}
-                  </p>
-                </div>
-                <div class="rounded-xl bg-white/80 dark:bg-white/5 border border-blue-100 dark:border-white/10 px-4 py-3">
-                  <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400">Local port</p>
-                  <p class="mt-1 font-semibold text-gray-900 dark:text-white font-mono">
-                    {{ playitStatus.recommended_local_port }}
-                  </p>
-                </div>
-              </div>
-            </div>
           </div>
 
           <div class="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
@@ -621,6 +598,10 @@
                     <button @click="openPlayitConnectModal" :disabled="playitBusy"
                       class="btn-success text-sm text-center disabled:opacity-50">
                       {{ playitStatus.linked ? 'Reconnect' : 'Connect' }}
+                    </button>
+                    <button v-if="playitStatus.linked" @click="disconnectPlayit" :disabled="playitBusy"
+                      class="bg-red-100 dark:bg-red-500/20 hover:bg-red-200 dark:hover:bg-red-500/30 text-red-700 dark:text-red-300 px-4 py-2 rounded-xl text-sm transition disabled:opacity-50">
+                      Disconnect
                     </button>
                   </div>
                 </div>
@@ -665,37 +646,6 @@
                       </svg>
                       Open Playit Agents
                     </a>
-
-                    <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-500 dark:text-gray-400">
-                      <span>Uses EnderPanel hosted Playit integration</span>
-                      <span class="font-mono text-[11px] text-gray-400 dark:text-gray-500">UI build {{ playitUiBuild }}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div v-if="playitStatus.linked" class="mt-5 rounded-xl border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 p-4">
-                  <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 flex-1">
-                      <div>
-                        <p class="text-[11px] uppercase tracking-wide text-emerald-700/70 dark:text-emerald-300/70">Agent</p>
-                        <p class="font-mono text-sm text-emerald-800 dark:text-emerald-200 break-all">{{ playitStatus.agent_id || 'pending' }}</p>
-                      </div>
-                      <div>
-                        <p class="text-[11px] uppercase tracking-wide text-emerald-700/70 dark:text-emerald-300/70">Stored secret</p>
-                        <p class="font-mono text-sm text-emerald-800 dark:text-emerald-200">{{ playitStatus.agent_secret_masked || 'hidden' }}</p>
-                      </div>
-                      <div>
-                        <p class="text-[11px] uppercase tracking-wide text-emerald-700/70 dark:text-emerald-300/70">Tunnel state</p>
-                        <p class="text-sm font-medium text-emerald-800 dark:text-emerald-200">
-                          {{ playitStatus.tunnel_created ? 'Tunnel created' : (playitStatus.tunnel_create_detail || 'Server needs to be started to make a tunnel.') }}
-                        </p>
-                      </div>
-                    </div>
-
-                    <button @click="disconnectPlayit" :disabled="playitBusy"
-                      class="bg-red-100 dark:bg-red-500/20 hover:bg-red-200 dark:hover:bg-red-500/30 text-red-700 dark:text-red-300 px-4 py-2 rounded-xl text-sm transition disabled:opacity-50">
-                      Disconnect
-                    </button>
                   </div>
                 </div>
               </div>
@@ -729,19 +679,19 @@
               <div class="bg-gray-50 dark:bg-white/5 rounded-2xl border border-gray-200 dark:border-white/10 p-6">
                 <h4 class="font-semibold text-lg mb-4">Public Address</h4>
                 <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                  Once the tunnel is created, the public Playit hostname appears here and on the dashboard.
+                  EnderPanel fetches the public Playit hostname automatically once the tunnel is ready.
                 </p>
-                <div class="space-y-3">
-                  <input v-model="playitDomainDraft" type="text" placeholder="example.playit.gg"
-                    class="input-field font-mono" />
-                  <button @click="savePlayitDomain" :disabled="playitBusy"
-                    class="btn-primary w-full disabled:opacity-50">
-                    Save Public Address
-                  </button>
-                </div>
                 <div v-if="playitStatus.saved_domain" class="mt-4 rounded-xl border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 p-4">
                   <p class="text-xs uppercase tracking-wide text-emerald-700 dark:text-emerald-300 mb-1">Saved address</p>
                   <p class="font-mono text-sm break-all">{{ playitStatus.saved_domain }}</p>
+                </div>
+                <div v-else class="mt-4 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-black/10 p-4">
+                  <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Status</p>
+                  <p class="text-sm text-gray-700 dark:text-gray-200">
+                    {{ playitStatus.tunnel_created
+                      ? 'Tunnel is created. Waiting for Playit address...'
+                      : (playitStatus.tunnel_create_detail || 'Start the server to create a Playit tunnel.') }}
+                  </p>
                 </div>
               </div>
 
@@ -1085,14 +1035,14 @@
   </Teleport>
 
   <transition name="modal">
-    <div v-if="showEulaModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[999] p-4 dqs-modal-overlay" @click.self="showEulaModal = false">
+    <div v-if="showEulaModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[999] p-4 dqs-modal-overlay" @click.self="!acceptingEula && closeEulaModal()">
       <div class="glass rounded-2xl w-full max-w-2xl p-6 scale-in dqs-modal-card">
         <div class="flex justify-between items-start gap-4 mb-4">
           <div>
             <h3 class="text-2xl font-bold">Minecraft EULA</h3>
             <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">This server requires acceptance of the Minecraft End User License Agreement before the first start.</p>
           </div>
-          <button @click="showEulaModal = false" class="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-xl transition">
+          <button @click="closeEulaModal" :disabled="acceptingEula" class="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-xl transition disabled:opacity-50">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
             </svg>
@@ -1103,8 +1053,10 @@
           <p>Read the Mojang EULA here: <a href="https://account.mojang.com/documents/minecraft_eula" target="_blank" class="text-mc-accent hover:underline">https://account.mojang.com/documents/minecraft_eula</a></p>
         </div>
         <div class="flex flex-col sm:flex-row gap-3 justify-end">
-          <button @click="showEulaModal = false" class="bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 px-5 py-3 rounded-xl transition">Cancel</button>
-          <button @click="acceptEula" class="btn-success px-5 py-3">Accept and Start</button>
+          <button @click="closeEulaModal" :disabled="acceptingEula" class="bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 px-5 py-3 rounded-xl transition disabled:opacity-50">Cancel</button>
+          <button @click="acceptEula" :disabled="acceptingEula" class="btn-success px-5 py-3 disabled:opacity-50">
+            {{ acceptingEula ? 'Starting...' : 'Accept and Start' }}
+          </button>
         </div>
       </div>
     </div>
@@ -1133,6 +1085,7 @@ const currentPath = ref('')
 const showEditor = ref(false)
 const showUpload = ref(false)
 const showEulaModal = ref(false)
+const acceptingEula = ref(false)
 const showSearchModal = ref(false)
 const uploadMode = ref('file')
 const editingFile = ref('')
@@ -1168,12 +1121,10 @@ const autoBackupInterval = ref(localStorage.getItem(`autoBackupInterval_${server
 const autoBackupTimer = ref(null)
 const nextBackupTime = ref('')
 const playitApiBase = import.meta.env.VITE_PLAYIT_PROXY_URL || 'https://vercel-playit-api.vercel.app/api/playit'
-const playitUiBuild = '2026-04-16-playit-3'
 const playitBusy = ref(false)
 const showPlayitConnectModal = ref(false)
 const playitConnectMessage = ref('Paste your one-time Playit setup code to connect this server.')
 const playitSetupCode = ref('')
-const playitDomainDraft = ref('')
 const playitStatus = ref({
   partner_configured: false,
   setup_url: 'https://playit.gg/l/setup-third-party',
@@ -1279,6 +1230,7 @@ function saveConsoleHistory() {
     const payload = {
       lines: consoleLines.value.slice(-400),
       lastLine: lastConsoleLine,
+      startedAt: lastConsoleStartedAt,
       updatedAt: Date.now(),
     }
     localStorage.setItem(getConsoleHistoryStorageKey(), JSON.stringify(payload))
@@ -1294,6 +1246,7 @@ function loadConsoleHistory() {
     if (!lines.length) return false
     consoleLines.value = lines.slice(-400)
     lastConsoleLine = typeof parsed?.lastLine === 'string' ? parsed.lastLine : (consoleLines.value[consoleLines.value.length - 1] || '')
+    lastConsoleStartedAt = typeof parsed?.startedAt === 'string' ? parsed.startedAt : ''
     return true
   } catch {
     return false
@@ -1305,6 +1258,7 @@ function clearConsoleHistory() {
   consoleLineBuffer = ''
   hasLoadedConsoleHistory = false
   lastConsoleLine = ''
+  lastConsoleStartedAt = ''
   try {
     localStorage.removeItem(getConsoleHistoryStorageKey())
   } catch {}
@@ -1317,6 +1271,7 @@ let reconnectAttempts = 0
 let consoleLineBuffer = ''
 let hasLoadedConsoleHistory = false
 let lastConsoleLine = ''
+let lastConsoleStartedAt = ''
 
 watch(activeTab, (newTab) => {
   if (newTab === 'files') {
@@ -1326,6 +1281,8 @@ watch(activeTab, (newTab) => {
     shouldKeepConsoleConnected = true
     if (server.value?.status === 'running' && (!ws || ws.readyState === WebSocket.CLOSED)) {
       connectWebSocket({ replay: !hasLoadedConsoleHistory || consoleLines.value.length === 0 })
+    } else {
+      void fetchRecentConsoleLogs()
     }
   } else {
     shouldKeepConsoleConnected = false
@@ -1372,22 +1329,15 @@ function switchTab(tabId) {
   }
 }
 
-function appendConsoleChunk(chunk) {
-  const normalized = String(chunk || '').replace(/\r/g, '')
+function appendConsoleLine(line) {
+  const normalized = String(line || '').trimEnd()
   if (!normalized) return
+  if (normalized === lastConsoleLine) return
+  lastConsoleLine = normalized
+  consoleLines.value.push(normalized)
+}
 
-  consoleLineBuffer += normalized
-  const parts = consoleLineBuffer.split('\n')
-  consoleLineBuffer = parts.pop() || ''
-
-  for (const part of parts) {
-    const line = part.trimEnd()
-    if (!line) continue
-    if (line === lastConsoleLine) continue
-    lastConsoleLine = line
-    consoleLines.value.push(line)
-  }
-
+function finalizeConsoleLines() {
   if (consoleLines.value.length > 400) {
     consoleLines.value = consoleLines.value.slice(-400)
   }
@@ -1397,6 +1347,85 @@ function appendConsoleChunk(chunk) {
   nextTick(() => {
     if (consoleRef.value) consoleRef.value.scrollTop = consoleRef.value.scrollHeight
   })
+}
+
+function mergeConsoleReplayLines(lines) {
+  const incoming = Array.isArray(lines)
+    ? lines
+        .map((line) => String(line || '').trimEnd())
+        .filter((line) => line)
+    : []
+
+  if (!incoming.length) return
+
+  const existing = consoleLines.value
+  const maxOverlap = Math.min(existing.length, incoming.length)
+  let overlap = 0
+
+  for (let size = maxOverlap; size > 0; size -= 1) {
+    let matches = true
+    for (let index = 0; index < size; index += 1) {
+      if (existing[existing.length - size + index] !== incoming[index]) {
+        matches = false
+        break
+      }
+    }
+    if (matches) {
+      overlap = size
+      break
+    }
+  }
+
+  for (const line of incoming.slice(overlap)) {
+    appendConsoleLine(line)
+  }
+
+  finalizeConsoleLines()
+}
+
+async function fetchRecentConsoleLogs() {
+  try {
+    const res = await axios.get(`/api/servers/${serverId}/console/recent`, {
+      params: { tail: 200 },
+    })
+    const status = String(res.data?.status || '')
+    const startedAt = String(res.data?.started_at || '')
+    const lines = Array.isArray(res.data?.lines) ? res.data.lines : []
+
+    if (status === 'missing' && lines.length === 0) {
+      clearConsoleHistory()
+      return
+    }
+
+    if (startedAt && startedAt !== lastConsoleStartedAt) {
+      consoleLines.value = []
+      consoleLineBuffer = ''
+      lastConsoleLine = ''
+      lastConsoleStartedAt = startedAt
+      saveConsoleHistory()
+    } else if (startedAt && !lastConsoleStartedAt) {
+      lastConsoleStartedAt = startedAt
+    }
+
+    mergeConsoleReplayLines(lines)
+  } catch (e) {
+    console.error('Failed to fetch recent console logs:', e)
+  }
+}
+
+function appendConsoleChunk(chunk) {
+  const normalized = String(chunk || '').replace(/\r/g, '')
+  if (!normalized) return
+
+  consoleLineBuffer += normalized
+  const parts = consoleLineBuffer.split('\n')
+  consoleLineBuffer = parts.pop() || ''
+
+  for (const part of parts) {
+    appendConsoleLine(part)
+  }
+
+  finalizeConsoleLines()
 }
 
 function setPreset(min, max) {
@@ -1459,7 +1488,6 @@ function applyPlayitStatus(data) {
     ...playitStatus.value,
     ...data,
   }
-  playitDomainDraft.value = data.saved_domain || ''
 }
 
 function openPlayitConnectModal() {
@@ -1768,21 +1796,6 @@ async function disconnectPlayit() {
   }
 }
 
-async function savePlayitDomain() {
-  playitBusy.value = true
-  try {
-    const res = await axios.post(`${playitApiBase}/servers/${serverId}/playit/metadata`, {
-      domain: playitDomainDraft.value.trim(),
-    })
-    applyPlayitStatus(res.data)
-    toast({ type: 'success', title: 'Saved', message: 'Playit public address saved.' })
-  } catch (e) {
-    toast({ type: 'error', title: 'Save Failed', message: e.response?.data?.detail || 'Failed to save address.' })
-  } finally {
-    playitBusy.value = false
-  }
-}
-
 async function uploadServerAvatar(event) {
   const file = event.target.files[0]
   if (!file) return
@@ -1798,6 +1811,37 @@ async function uploadServerAvatar(event) {
     toast({ type: 'error', title: 'Upload Failed', message: e.response?.data?.detail || 'Failed to upload avatar' })
   }
   event.target.value = ''
+}
+
+async function handleConsoleSocketClose(lifetimeMs) {
+  if (!shouldKeepConsoleConnected || activeTab.value !== 'console') {
+    return
+  }
+
+  try {
+    await fetchServer()
+  } catch {}
+
+  if (server.value?.status === 'running') {
+    if (lifetimeMs < 1500) {
+      reconnectAttempts += 1
+    } else {
+      reconnectAttempts = 0
+    }
+
+    if (reconnectAttempts >= 3) {
+      appendConsoleLine('[Console connection failed repeatedly. Reload the page or restart the backend.]')
+      finalizeConsoleLines()
+      return
+    }
+
+    const delay = 2000 * Math.max(1, reconnectAttempts)
+    reconnectTimeout = setTimeout(() => connectWebSocket({ replay: true }), delay)
+    return
+  }
+
+  reconnectAttempts = 0
+  await fetchRecentConsoleLogs()
 }
 
 function connectWebSocket(options = {}) {
@@ -1830,6 +1874,10 @@ function connectWebSocket(options = {}) {
     ws.onopen = () => {
       reconnectAttempts = 0
       hasLoadedConsoleHistory = true
+      if (server.value?.container_started_at) {
+        lastConsoleStartedAt = server.value.container_started_at
+        saveConsoleHistory()
+      }
     }
 
     ws.onmessage = (event) => {
@@ -1839,33 +1887,15 @@ function connectWebSocket(options = {}) {
     ws.onclose = () => {
       const lifetimeMs = Date.now() - openedAt
       ws = null
-      if (shouldKeepConsoleConnected && activeTab.value === 'console' && server.value?.status === 'running') {
-        if (lifetimeMs < 1500) {
-          reconnectAttempts += 1
-        } else {
-          reconnectAttempts = 0
-        }
-
-        if (reconnectAttempts >= 3) {
-    consoleLines.value.push('[Console connection failed repeatedly. Reload the page or restart the backend.]')
-          saveConsoleHistory()
-          nextTick(() => {
-            if (consoleRef.value) consoleRef.value.scrollTop = consoleRef.value.scrollHeight
-          })
-          return
-        }
-
-        const delay = 2000 * Math.max(1, reconnectAttempts)
-        reconnectTimeout = setTimeout(() => connectWebSocket({ replay: true }), delay)
-      }
+      void handleConsoleSocketClose(lifetimeMs)
     }
 
     ws.onerror = () => {
       ws = null
     }
   } catch (e) {
-    consoleLines.value.push('[Failed to connect to console]')
-    saveConsoleHistory()
+    appendConsoleLine('[Failed to connect to console]')
+    finalizeConsoleLines()
   }
 }
 
@@ -1880,6 +1910,10 @@ function disconnectWebSocket() {
     ws.close()
     ws = null
   }
+}
+
+function closeEulaModal() {
+  showEulaModal.value = false
 }
 
 async function startServer() {
@@ -1908,18 +1942,24 @@ async function startServer() {
 }
 
 async function acceptEula() {
+  if (acceptingEula.value) {
+    return
+  }
+  acceptingEula.value = true
   try {
     clearConsoleHistory()
     await axios.post(`/api/servers/${serverId}/start`, { accept_eula: true })
     await fetchServer()
     await syncPlayitStatus()
     await fetchPlayitStatus()
-    showEulaModal.value = false
+    closeEulaModal()
     setTimeout(connectWebSocket, 500)
     toast({ type: 'success', title: 'EULA Accepted', message: 'Server starting...' })
   } catch (e) {
     const msg = e.response?.data?.detail || 'Failed to accept EULA'
     toast({ type: 'error', title: 'EULA Error', message: msg })
+  } finally {
+    acceptingEula.value = false
   }
 }
 
@@ -2244,7 +2284,7 @@ async function toggleSftp() {
     const toggleRes = await axios.post(`/api/servers/${serverId}/sftp`, payload)
     if (toggleRes.data.port) sftpPort.value = toggleRes.data.port
     if (payload.enabled) {
-      toast({ type: 'success', title: 'SFTP Enabled', message: 'SFTP enabled on port ${sftpPort.value}.' })
+      toast({ type: 'success', title: 'SFTP Enabled', message: `SFTP enabled on port ${sftpPort.value}.` })
     } else {
       toast({ type: 'success', title: 'SFTP Disabled', message: 'Panel-wide SFTP access has been disabled.' })
     }
@@ -2390,12 +2430,16 @@ onMounted(async () => {
   if (activeTab.value === 'network') {
     await fetchNetworkStats()
   }
-  if (activeTab.value === 'console' && server.value?.status === 'running') {
-    connectWebSocket()
+  if (activeTab.value === 'console') {
+    if (server.value?.status === 'running') {
+      connectWebSocket()
+    } else {
+      clearConsoleHistory()
+      await fetchRecentConsoleLogs()
+    }
   }
   statusInterval = setInterval(async () => {
     await fetchServer()
-    await syncPlayitStatus()
     await fetchPlayitStatus()
     if (activeTab.value === 'network') {
       await fetchNetworkStats()

@@ -62,13 +62,6 @@ def update_settings(server_id: int, data: SettingsUpdate, db: Session = Depends(
                         key, value = line.split("=", 1)
                         existing[key] = value
 
-    for key, value in data.settings.items():
-        if not isinstance(key, str) or not isinstance(value, (str, int, float, bool)):
-            raise HTTPException(status_code=400, detail="Invalid settings key or value type")
-        if "=" in key or "\n" in key or "\r" in key:
-            raise HTTPException(status_code=400, detail=f"Invalid settings key: {key!r}")
-        if "\n" in str(value) or "\r" in str(value):
-            raise HTTPException(status_code=400, detail=f"Invalid settings value for key: {key!r}")
     existing.update(data.settings)
 
     with open(props_path, "w") as f:
@@ -80,8 +73,8 @@ def update_settings(server_id: int, data: SettingsUpdate, db: Session = Depends(
     if "max-players" in data.settings:
         try:
             server.max_players = int(data.settings["max-players"])
-        except (ValueError, TypeError):
-            raise HTTPException(status_code=400, detail="max-players must be an integer")
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="max-players must be a valid integer") from exc
     db.commit()
 
     return {"status": "updated", "settings": existing}

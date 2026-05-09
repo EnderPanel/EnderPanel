@@ -30,9 +30,9 @@
       <button @click="showCreate = true" class="btn-success">Create Server</button>
     </div>
 
-    <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6 animate-stagger">
+    <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6 animate-stagger dashboard-server-grid">
       <div v-for="server in servers" :key="server.id"
-        class="card-hover p-4 sm:p-6 cursor-pointer group dqs-server-card"
+        class="card-hover p-4 sm:p-6 cursor-pointer group dqs-server-card dashboard-server-card"
         @click="$router.push(`/server/${server.id}`)">
         <div class="flex justify-between items-start mb-5">
           <div class="flex items-center gap-3">
@@ -117,39 +117,56 @@
     </div>
 
     <transition name="modal">
-      <div v-if="showDeleteConfirm" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 dqs-modal-overlay" @click.self="showDeleteConfirm = false">
+      <div v-if="showDeleteConfirm" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 dqs-modal-overlay" @click.self="!deleting && (showDeleteConfirm = false)">
         <div class="glass rounded-2xl p-5 sm:p-8 w-full max-w-md scale-in dqs-modal-card">
           <div class="flex items-center gap-3 mb-5">
-            <div class="w-12 h-12 bg-red-100 dark:bg-red-500/20 rounded-xl flex items-center justify-center">
-              <svg class="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div :class="deleting ? 'bg-mc-accent/10 text-mc-accent' : 'bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400'" class="w-12 h-12 rounded-xl flex items-center justify-center">
+              <svg v-if="!deleting" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+              </svg>
+              <svg v-else class="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
             </div>
             <div>
-              <h2 class="text-xl font-bold text-red-600 dark:text-red-400">Delete Server</h2>
-              <p class="text-sm text-gray-500 dark:text-gray-400">This action cannot be undone</p>
+              <h2 :class="deleting ? 'text-mc-accent' : 'text-red-600 dark:text-red-400'" class="text-xl font-bold">
+                {{ deleting ? 'Deleting Server' : 'Delete Server' }}
+              </h2>
+              <p class="text-sm text-gray-500 dark:text-gray-400">
+                {{ deleting ? 'Please wait while Docker containers and server files are cleaned up.' : 'This action cannot be undone' }}
+              </p>
             </div>
           </div>
-          <p class="text-gray-600 dark:text-gray-300 mb-5">Are you sure you want to delete <strong class="text-gray-900 dark:text-white">{{ deletingServer?.name }}</strong>?</p>
-          <div class="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl p-4 mb-6">
-            <ul class="text-red-600 dark:text-red-400 text-sm space-y-1">
+          <p class="text-gray-600 dark:text-gray-300 mb-5">
+            <template v-if="!deleting">
+              Are you sure you want to delete <strong class="text-gray-900 dark:text-white">{{ deletingServer?.name }}</strong>?
+            </template>
+            <template v-else>
+              <strong class="text-gray-900 dark:text-white">{{ deletingServer?.name }}</strong> is being deleted. This can take a little longer on Docker Desktop.
+            </template>
+          </p>
+          <div :class="deleting ? 'bg-mc-accent/5 border-mc-accent/20' : 'bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/20'" class="rounded-xl p-4 mb-6 border">
+            <ul :class="deleting ? 'text-gray-600 dark:text-gray-300' : 'text-red-600 dark:text-red-400'" class="text-sm space-y-1">
               <li class="flex items-center gap-2">
                 <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>
-                All server files will be permanently deleted
+                {{ deleting ? 'Removing the server container and sidecars' : 'All server files will be permanently deleted' }}
               </li>
               <li class="flex items-center gap-2">
                 <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>
-                World data and player progress will be lost
+                {{ deleting ? 'Deleting the server folder and log history' : 'World data and player progress will be lost' }}
               </li>
               <li class="flex items-center gap-2">
                 <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>
-                Plugins and configurations will be removed
+                {{ deleting ? 'Refreshing the server list when cleanup finishes' : 'Plugins and configurations will be removed' }}
               </li>
             </ul>
           </div>
           <div class="flex gap-3">
-            <button @click="showDeleteConfirm = false" class="flex-1 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 py-3 rounded-xl transition">Cancel</button>
-            <button @click="deleteServer" class="flex-1 btn-danger">Delete</button>
+            <button @click="showDeleteConfirm = false" :disabled="deleting" class="flex-1 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 py-3 rounded-xl transition disabled:opacity-50">Cancel</button>
+            <button @click="deleteServer" :disabled="deleting" class="flex-1 btn-danger disabled:opacity-50">
+              {{ deleting ? 'Deleting...' : 'Delete' }}
+            </button>
           </div>
         </div>
       </div>
@@ -185,7 +202,7 @@
                 <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
               </svg>
               <span class="text-sm font-medium">
-                {{ downloadStatus === 'downloading' ? `Downloading ${newServer.server_type} server.jar...` : downloadStatus === 'success' ? 'Server.jar downloaded!' : 'Failed to download server.jar' }}
+                {{ downloadStatus === 'downloading' ? createStatusLabel() : downloadStatus === 'success' ? 'Server files downloaded!' : 'Failed to download server files' }}
               </span>
             </div>
           </transition>
@@ -286,7 +303,7 @@
     </transition>
 
     <transition name="modal">
-      <div v-if="showEulaModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 dqs-modal-overlay" @click.self="showEulaModal = false">
+      <div v-if="showEulaModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 dqs-modal-overlay" @click.self="!acceptingEula && closeEulaModal()">
         <div class="glass rounded-2xl p-5 sm:p-8 w-full max-w-md scale-in dqs-modal-card">
           <div class="flex items-start gap-4 mb-5">
             <div class="w-12 h-12 bg-mc-accent/10 rounded-2xl flex items-center justify-center text-mc-accent">
@@ -307,8 +324,10 @@
           </div>
 
           <div class="flex gap-3 flex-col sm:flex-row-reverse">
-            <button @click="acceptEula" class="btn-success flex-1 py-3">Accept & Start</button>
-            <button @click="showEulaModal = false" class="flex-1 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 py-3 rounded-xl transition">Cancel</button>
+            <button @click="acceptEula" :disabled="acceptingEula" class="btn-success flex-1 py-3 disabled:opacity-50">
+              {{ acceptingEula ? 'Starting...' : 'Accept & Start' }}
+            </button>
+            <button @click="closeEulaModal" :disabled="acceptingEula" class="flex-1 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 py-3 rounded-xl transition disabled:opacity-50">Cancel</button>
           </div>
         </div>
       </div>
@@ -330,8 +349,10 @@ const creating = ref(false)
 const downloadStatus = ref('')
 const showDeleteConfirm = ref(false)
 const deletingServer = ref(null)
+const deleting = ref(false)
 const showEulaModal = ref(false)
 const eulaServer = ref(null)
+const acceptingEula = ref(false)
 const newServer = ref({ name: '', server_type: 'paper', port: 25565, max_players: 20, version: '', ram_min: 512, ram_max: 1024, cpu_cores: 1, swap_mb: 512 })
 
 const serverTypes = [
@@ -347,6 +368,13 @@ const versionsLoading = ref(false)
 const versionWarning = ref('')
 const versionCache = {}
 const currentHost = window.location.hostname || 'localhost'
+
+function createStatusLabel() {
+  if (newServer.value.server_type === 'forge' || newServer.value.server_type === 'neoforge') {
+    return `Downloading ${newServer.value.server_type} installer...`
+  }
+  return `Downloading ${newServer.value.server_type} server.jar...`
+}
 
 function getServerAddress(server) {
   return server.playit_domain || `${currentHost}:${server.port}`
@@ -432,6 +460,11 @@ async function createServer() {
   } catch (e) {
     downloadStatus.value = 'error'
     creating.value = false
+    toast({
+      title: 'Failed to create server',
+      message: e.response?.data?.detail || e.message || 'Please try again.',
+      type: 'error'
+    })
   }
 }
 
@@ -456,15 +489,23 @@ async function startServer(server) {
   await fetchServers()
 }
 
+function closeEulaModal() {
+  showEulaModal.value = false
+  eulaServer.value = null
+}
+
 async function acceptEula() {
-  if (!eulaServer.value) return
+  if (!eulaServer.value || acceptingEula.value) return
+  acceptingEula.value = true
   try {
-    await axios.post(`/api/servers/${eulaServer.value.id}/accept-eula`, { accept: true })
-    showEulaModal.value = false
+    await axios.post(`/api/servers/${eulaServer.value.id}/start`, { accept_eula: true })
+    closeEulaModal()
     toast({ title: 'EULA Accepted', message: 'Starting server now...', type: 'success' })
-    await startServer(eulaServer.value)
+    await fetchServers()
   } catch (e) {
     toast({ title: 'EULA Error', message: e.response?.data?.detail || 'Failed to accept EULA', type: 'error' })
+  } finally {
+    acceptingEula.value = false
   }
 }
 
@@ -492,15 +533,18 @@ function confirmDelete(server) {
 }
 
 async function deleteServer() {
-  if (!deletingServer.value) return
+  if (!deletingServer.value || deleting.value) return
+  deleting.value = true
   try {
     await axios.delete(`/api/servers/${deletingServer.value.id}`)
   } catch (e) {
     toast({ title: 'Failed to delete server', message: e.response?.data?.detail || '', type: 'error' })
+  } finally {
+    await fetchServers()
+    deleting.value = false
+    showDeleteConfirm.value = false
+    deletingServer.value = null
   }
-  showDeleteConfirm.value = false
-  deletingServer.value = null
-  await fetchServers()
 }
 
 onMounted(() => {
