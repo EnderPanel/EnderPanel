@@ -13,7 +13,7 @@ elif command -v yum &> /dev/null; then
 elif command -v pacman &> /dev/null; then
     PKG="pacman"
 else
-    echo "Unsupported package manager. Install Python 3, Node.js, Java 8/17/21, and Docker manually."
+    echo "Unsupported package manager. Install Python 3, Node.js, Java 8/17/21/25, and Docker manually."
     exit 1
 fi
 
@@ -79,7 +79,7 @@ if [ "$PKG" = "apt" ]; then
         fi
     fi
     sudo apt-get update -o APT::Update::Error-Mode=ignore 2>/dev/null || sudo apt update || true
-    for ver in 8 17 21; do
+    for ver in 8 17 21 25; do
         if ! update-alternatives --list java 2>/dev/null | grep -q "java-${ver}"; then
             echo "Installing Java ${ver}..."
             sudo apt install -y openjdk-${ver}-jdk
@@ -88,7 +88,7 @@ if [ "$PKG" = "apt" ]; then
         fi
     done
 elif [ "$PKG" = "dnf" ]; then
-    for pair in "1.8:java-1.8.0-openjdk-devel" "17:java-17-openjdk-devel" "21:java-21-openjdk-devel"; do
+    for pair in "1.8:java-1.8.0-openjdk-devel" "17:java-17-openjdk-devel" "21:java-21-openjdk-devel" "25:java-latest-openjdk-devel"; do
         ver="${pair%%:*}"; pkg="${pair##*:}"
         key="jre_${ver/./_}"
         if ! alternatives --list 2>/dev/null | grep -q "$key"; then
@@ -99,7 +99,7 @@ elif [ "$PKG" = "dnf" ]; then
         fi
     done
 elif [ "$PKG" = "yum" ]; then
-    for pair in "1.8:java-1.8.0-openjdk-devel" "17:java-17-openjdk-devel" "21:java-21-openjdk-devel"; do
+    for pair in "1.8:java-1.8.0-openjdk-devel" "17:java-17-openjdk-devel" "21:java-21-openjdk-devel" "25:java-latest-openjdk-devel"; do
         ver="${pair%%:*}"; pkg="${pair##*:}"
         if ! alternatives --list 2>/dev/null | grep -q "jre_${ver/./_}"; then
             echo "Installing Java ${ver}..."
@@ -117,6 +117,12 @@ elif [ "$PKG" = "pacman" ]; then
             echo "Java ${ver} found."
         fi
     done
+    if ! pacman -Qs "jre-openjdk" &> /dev/null; then
+        echo "Installing Java 25..."
+        sudo pacman -S --noconfirm jre-openjdk jdk-openjdk
+    else
+        echo "Latest OpenJDK found."
+    fi
 fi
 
 # Install Docker

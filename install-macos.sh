@@ -43,6 +43,12 @@ if ! /usr/libexec/java_home -v 21 &> /dev/null; then
 else
     echo "Java 21 found."
 fi
+if ! /usr/libexec/java_home -v 25 &> /dev/null; then
+    echo "Installing Java 25..."
+    brew install --cask temurin
+else
+    echo "Java 25 found."
+fi
 
 # Install Docker
 if ! command -v docker &> /dev/null; then

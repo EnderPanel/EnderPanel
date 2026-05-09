@@ -40,6 +40,28 @@ function Resolve-CommandPath {
     return $null
 }
 
+function Wait-ForDockerDaemon {
+    param(
+        [int]$TimeoutSeconds = 180
+    )
+
+    $DockerCmd = Resolve-CommandPath @("docker.exe", "docker")
+    if (-not $DockerCmd) {
+        throw "Docker CLI was not found."
+    }
+
+    $Deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $Deadline) {
+        & $DockerCmd info *>$null
+        if ($LASTEXITCODE -eq 0) {
+            return
+        }
+        Start-Sleep -Seconds 3
+    }
+
+    throw "Docker Desktop is installed, but the Docker daemon did not become ready within ${TimeoutSeconds} seconds."
+}
+
 function Install-DownloadedExe {
     param(
         [Parameter(Mandatory = $true)][string]$Url,
@@ -125,7 +147,7 @@ try { node --version *>$null } catch {
 
 # Install Java
 Write-Host "Checking Java installations..." -ForegroundColor Cyan
-foreach ($JavaVersion in 8, 17, 21) {
+foreach ($JavaVersion in 8, 17, 21, 25) {
     if (-not (Test-JavaInstall -MajorVersion $JavaVersion)) {
         Write-Host "Installing Java $JavaVersion..." -ForegroundColor Yellow
         Install-DownloadedMsi `
@@ -143,6 +165,17 @@ try { docker --version *>$null } catch {
     Write-Host "Please install Docker Desktop from https://docker.com" -ForegroundColor Red
     Start-Process "https://www.docker.com/products/docker-desktop/"
     Read-Host "Press Enter after installing Docker Desktop"
+}
+
+$DockerDesktopExe = Join-Path $env:ProgramFiles "Docker\Docker\Docker Desktop.exe"
+if (Test-Path $DockerDesktopExe) {
+    $DockerDesktopProcess = Get-Process -Name "Docker Desktop" -ErrorAction SilentlyContinue
+    if (-not $DockerDesktopProcess) {
+        Write-Host "Starting Docker Desktop..." -ForegroundColor Yellow
+        Start-Process -FilePath $DockerDesktopExe
+    }
+} else {
+    Write-Host "Docker Desktop executable not found in Program Files. If Docker is installed elsewhere, make sure it is running." -ForegroundColor Yellow
 }
 # Configure Docker Desktop RAM allocation (Windows via WSL2)
 Write-Host ""
@@ -168,6 +201,9 @@ Write-Host "Docker WSL2 RAM: ${InputRam}GB, Swap: ${InputSwap}GB (saved to $WslC
 Write-Host "Restart WSL2 and Docker Desktop for changes to take effect." -ForegroundColor Yellow
 Write-Host "  Run: wsl --shutdown" -ForegroundColor Gray
 Write-Host ""
+
+Write-Host "Waiting for Docker Desktop to become ready..." -ForegroundColor Cyan
+Wait-ForDockerDaemon
 
 
 Write-Host ""
@@ -245,7 +281,14 @@ if (-not (Test-Path "$InstallDir\frontend\dist\index.html")) {
 # Build Docker image
 Write-Host "Building Docker image..." -ForegroundColor Cyan
 Set-Location "$InstallDir\backend"
-docker build -t mc-panel-server:latest .
+$DockerCmd = Resolve-CommandPath @("docker.exe", "docker")
+if (-not $DockerCmd) {
+    throw "docker command was not found before image build."
+}
+& $DockerCmd build -t mc-panel-server:latest .
+if ($LASTEXITCODE -ne 0) {
+    throw "docker build failed with exit code $LASTEXITCODE"
+}
 
 Write-Host ""
 Write-Host "=== Installation Complete ===" -ForegroundColor Green

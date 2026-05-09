@@ -102,6 +102,8 @@ def java_version_for_mc(mc_version: str) -> int:
         patch = int(parts[2]) if len(parts) > 2 else 0
     except (ValueError, IndexError):
         return 21
+    if minor >= 26:
+        return 25
     if minor > 20 or (minor == 20 and patch >= 5):
         return 21
     if minor >= 17:
@@ -115,11 +117,43 @@ def image_for_mc(mc_version: str) -> str:
         return f"{IMAGE}:java11"
     if v == 17:
         return f"{IMAGE}:java17"
+    if v == 25:
+        return f"{IMAGE}:java25"
     return f"{IMAGE}:latest"
 
 
 def java_cmd(version: str) -> str:
     return "/opt/java/openjdk/bin/java"
+
+
+def ensure_runtime_images(client) -> None:
+    base = os.path.dirname(os.path.dirname(__file__))
+    build_errors: list[str] = []
+
+    for tag, dockerfile in [
+        ("latest", "Dockerfile"),
+        ("java25", "Dockerfile.java25"),
+        ("java17", "Dockerfile.java17"),
+        ("java11", "Dockerfile.java11"),
+    ]:
+        image_name = f"{IMAGE}:{tag}"
+        try:
+            client.images.get(image_name)
+            continue
+        except Exception:
+            pass
+
+        try:
+            client.images.build(path=base, tag=image_name, dockerfile=dockerfile)
+        except Exception as exc:
+            build_errors.append(f"{image_name}: {exc}")
+
+    if build_errors:
+        raise HTTPException(
+            status_code=500,
+            detail="Docker images could not be built. Make sure Docker Desktop is running and try again. "
+            + " | ".join(build_errors),
+        )
 
 
 def server_properties_file(sid: int, name: str) -> str:
@@ -161,7 +195,7 @@ def extract_neoforge_mc_version(value: str) -> str | None:
     parts = value.split(".")
     if len(parts) < 2 or not all(part.isdigit() for part in parts[:2]):
         return None
-    return f"1.{parts[0]}.{parts[1]}"
+    return f"{parts[0]}.{parts[1]}"
 
 
 def unique_versions_desc(values: list[str]) -> list[str]:
@@ -654,14 +688,7 @@ async def start_server(
     if not ok:
         raise HTTPException(status_code=400, detail=install_error or "Failed to prepare server files")
 
-    # Ensure the correct image is built
-    base = os.path.dirname(os.path.dirname(__file__))
-    for tag, dockerfile in [("latest", "Dockerfile"), ("java17", "Dockerfile.java17"), ("java11", "Dockerfile.java11")]:
-        try: client.images.get(f"{IMAGE}:{tag}")
-        except:
-            try: client.images.build(path=base, tag=f"{IMAGE}:{tag}", dockerfile=dockerfile)
-            except Exception as e:
-                logger.warning(f"Could not build Docker image {tag}: {e}")
+    ensure_runtime_images(client)
     
     java = java_cmd(s.version)
     if s.custom_launch_command:
@@ -695,22 +722,28 @@ async def start_server(
     except DockerNotFound:
         pass
 
-    client.containers.run(
-        image_for_mc(s.version),
-        command=cmd,
-        name=name,
-        detach=True,
-        tty=True,
-        stdin_open=True,
-        volumes={d: {"bind": "/server", "mode": "rw"}},
-        ports={"25565/tcp": s.port, "25575/tcp": 25575 + s.id},
-        mem_limit=f"{s.ram_max}m",
-        memswap_limit=f"{s.ram_max + s.swap_mb}m",
-        cpu_period=100000,
-        cpu_quota=int(s.cpu_cores * 100000),
-        working_dir="/server",
-        environment={"EULA": "TRUE"}
-    )
+    try:
+        client.containers.run(
+            image_for_mc(s.version),
+            command=cmd,
+            name=name,
+            detach=True,
+            tty=True,
+            stdin_open=True,
+            volumes={d: {"bind": "/server", "mode": "rw"}},
+            ports={"25565/tcp": s.port, "25575/tcp": 25575 + s.id},
+            mem_limit=f"{s.ram_max}m",
+            memswap_limit=f"{s.ram_max + s.swap_mb}m",
+            cpu_period=100000,
+            cpu_quota=int(s.cpu_cores * 100000),
+            working_dir="/server",
+            environment={"EULA": "TRUE"}
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create Docker container. Make sure Docker Desktop is running. {exc}",
+        )
     
     s.status = "running"
     db.commit()
