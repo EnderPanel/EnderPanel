@@ -197,10 +197,7 @@ def extract_neoforge_mc_version(value: str) -> str | None:
         return None
     first = int(parts[0])
     second = parts[1]
-    # Older NeoForge metadata uses the Minecraft minor/patch directly,
-    # e.g. 21.1.x -> Minecraft 1.21.1 and 20.6.x -> Minecraft 1.20.6.
-    # Newer version lines like 26.1 are already the display form we want.
-    if first < 25:
+    if first < 26:
         return f"1.{first}.{second}"
     return f"{first}.{second}"
 

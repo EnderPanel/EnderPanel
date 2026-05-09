@@ -1844,6 +1844,31 @@ async function handleConsoleSocketClose(lifetimeMs) {
   await fetchRecentConsoleLogs()
 }
 
+async function monitorConsoleStartup(attempt = 0) {
+  if (!shouldKeepConsoleConnected || activeTab.value !== 'console') {
+    return
+  }
+
+  try {
+    await fetchServer()
+  } catch {}
+
+  if (server.value?.status === 'running') {
+    connectWebSocket({ replay: true })
+    return
+  }
+
+  await fetchRecentConsoleLogs()
+
+  if (attempt >= 19) {
+    return
+  }
+
+  reconnectTimeout = setTimeout(() => {
+    void monitorConsoleStartup(attempt + 1)
+  }, 1500)
+}
+
 function connectWebSocket(options = {}) {
   const { replay = false } = options
   shouldKeepConsoleConnected = true
@@ -1939,7 +1964,7 @@ async function startServer() {
     await fetchServer()
     await syncPlayitStatus()
     await fetchPlayitStatus()
-    setTimeout(connectWebSocket, 500)
+    void monitorConsoleStartup()
     toast({ type: 'success', title: 'Started', message: 'Server starting...' })
   } catch (e) {
     const msg = e.response?.data?.detail || 'Failed to start server'
@@ -1957,17 +1982,18 @@ async function acceptEula() {
     return
   }
   acceptingEula.value = true
+  closeEulaModal()
+  toast({ type: 'success', title: 'EULA Accepted', message: 'Server starting...' })
   try {
     clearConsoleHistory()
     await axios.post(`/api/servers/${serverId}/start`, { accept_eula: true })
     await fetchServer()
     await syncPlayitStatus()
     await fetchPlayitStatus()
-    closeEulaModal()
-    setTimeout(connectWebSocket, 500)
-    toast({ type: 'success', title: 'EULA Accepted', message: 'Server starting...' })
+    void monitorConsoleStartup()
   } catch (e) {
     const msg = e.response?.data?.detail || 'Failed to accept EULA'
+    showEulaModal.value = true
     toast({ type: 'error', title: 'EULA Error', message: msg })
   } finally {
     acceptingEula.value = false

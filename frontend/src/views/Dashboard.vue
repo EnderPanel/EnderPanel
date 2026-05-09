@@ -496,13 +496,16 @@ function closeEulaModal() {
 
 async function acceptEula() {
   if (!eulaServer.value || acceptingEula.value) return
+  const targetServer = eulaServer.value
   acceptingEula.value = true
+  closeEulaModal()
+  toast({ title: 'EULA Accepted', message: 'Starting server now...', type: 'success' })
   try {
-    await axios.post(`/api/servers/${eulaServer.value.id}/start`, { accept_eula: true })
-    closeEulaModal()
-    toast({ title: 'EULA Accepted', message: 'Starting server now...', type: 'success' })
+    await axios.post(`/api/servers/${targetServer.id}/start`, { accept_eula: true })
     await fetchServers()
   } catch (e) {
+    eulaServer.value = targetServer
+    showEulaModal.value = true
     toast({ title: 'EULA Error', message: e.response?.data?.detail || 'Failed to accept EULA', type: 'error' })
   } finally {
     acceptingEula.value = false
