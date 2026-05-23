@@ -32,7 +32,7 @@
 
     <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6 animate-stagger dashboard-server-grid">
       <div v-for="server in servers" :key="server.id"
-        class="card-hover p-4 sm:p-6 cursor-pointer group dqs-server-card dashboard-server-card"
+        class="card-hover p-4 sm:p-6 cursor-pointer group dqs-server-card dashboard-server-card relative overflow-hidden"
         @click="$router.push(`/server/${server.id}`)">
         <div class="flex justify-between items-start mb-5">
           <div class="flex items-center gap-3">
@@ -173,131 +173,367 @@
     </transition>
 
     <transition name="modal">
-      <div v-if="showCreate" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 dqs-modal-overlay" @click.self="showCreate = false">
-        <div class="glass rounded-2xl p-4 sm:p-8 w-full max-w-lg max-h-[90vh] overflow-y-auto scale-in dqs-modal-card">
+      <div v-if="showCreate" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 dqs-modal-overlay" @click.self="closeCreateModal">
+        <div :class="createMode === 'pearl' ? 'max-w-4xl' : 'max-w-lg'" class="glass rounded-2xl p-4 sm:p-8 w-full max-h-[90vh] overflow-y-auto scale-in dqs-modal-card">
           <div class="flex items-center justify-between mb-6">
             <h2 class="text-xl font-bold">Create New Server</h2>
-            <button @click="showCreate = false" class="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-xl transition">
+            <button @click="closeCreateModal" class="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-xl transition">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
               </svg>
             </button>
           </div>
 
-          <transition name="fade">
-            <div v-if="downloadStatus" class="mb-5 p-4 rounded-xl flex items-center gap-3" 
-              :class="{
-                'bg-yellow-50 dark:bg-yellow-500/10 border border-yellow-200 dark:border-yellow-500/30 text-yellow-700 dark:text-yellow-400': downloadStatus === 'downloading',
-                'bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400': downloadStatus === 'success',
-                'bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-400': downloadStatus === 'error'
-              }">
-              <svg v-if="downloadStatus === 'downloading'" class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              <svg v-else-if="downloadStatus === 'success'" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-              </svg>
-              <svg v-else class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-              </svg>
-              <span class="text-sm font-medium">
-                {{ downloadStatus === 'downloading' ? createStatusLabel() : downloadStatus === 'success' ? 'Server files downloaded!' : 'Failed to download server files' }}
-              </span>
-            </div>
-          </transition>
-          <p v-if="versionWarning" class="mb-4 text-xs text-yellow-700 dark:text-yellow-400">
-            {{ versionWarning }}
-          </p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-6">
+            <button
+              type="button"
+              @click="createMode = 'quick'"
+              :class="createMode === 'quick'
+                ? 'bg-gradient-to-r from-mc-accent to-blue-500 text-white shadow-lg shadow-mc-accent/20'
+                : 'bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white'"
+              class="rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 border border-gray-200 dark:border-white/5"
+            >
+              Quick Create
+            </button>
+            <button
+              v-if="pearlFeature.enabled"
+              type="button"
+              @click="createMode = 'pearl'"
+              :class="createMode === 'pearl'
+                ? 'bg-gradient-to-r from-mc-accent to-blue-500 text-white shadow-lg shadow-mc-accent/20'
+                : 'bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white'"
+              class="rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 border border-gray-200 dark:border-white/5"
+            >
+              Pterodactyl Eggs
+            </button>
+          </div>
 
-          <form @submit.prevent="createServer" class="space-y-5">
-            <div>
-              <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Server Name</label>
-              <input v-model="newServer.name" type="text" required placeholder="My Server"
-                class="input-field" />
-            </div>
+          <template v-if="createMode === 'quick'">
+            <transition name="fade">
+              <div v-if="downloadStatus" class="mb-5 p-4 rounded-xl flex items-center gap-3" 
+                :class="{
+                  'bg-yellow-50 dark:bg-yellow-500/10 border border-yellow-200 dark:border-yellow-500/30 text-yellow-700 dark:text-yellow-400': downloadStatus === 'downloading',
+                  'bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400': downloadStatus === 'success',
+                  'bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-400': downloadStatus === 'error'
+                }">
+                <svg v-if="downloadStatus === 'downloading'" class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <svg v-else-if="downloadStatus === 'success'" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                </svg>
+                <svg v-else class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                </svg>
+                <span class="text-sm font-medium">
+                  {{ downloadStatus === 'downloading' ? createStatusLabel() : downloadStatus === 'success' ? 'Server files downloaded!' : 'Failed to download server files' }}
+                </span>
+              </div>
+            </transition>
+            <p v-if="versionWarning" class="mb-4 text-xs text-yellow-700 dark:text-yellow-400">
+              {{ versionWarning }}
+            </p>
 
-            <div>
-              <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Server Type</label>
-              <div class="flex gap-2">
-                <button v-for="type in serverTypes" :key="type.id" type="button" 
-                  @click="selectServerType(type.id)"
-                  :class="newServer.server_type === type.id 
-                    ? 'bg-gradient-to-r from-mc-accent to-blue-500 text-white shadow-lg shadow-mc-accent/20' 
-                    : 'bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white'"
-                  class="flex-1 py-2.5 px-3 rounded-xl text-sm font-medium transition-all duration-200 border border-gray-200 dark:border-white/5 whitespace-nowrap">
-                  {{ type.name }}
+            <form @submit.prevent="createServer" class="space-y-5">
+              <div>
+                <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Server Name</label>
+                <input v-model="newServer.name" type="text" required placeholder="My Server"
+                  class="input-field" />
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Server Type</label>
+                <div class="flex gap-2">
+                  <button v-for="type in serverTypes" :key="type.id" type="button" 
+                    @click="selectServerType(type.id)"
+                    :class="newServer.server_type === type.id 
+                      ? 'bg-gradient-to-r from-mc-accent to-blue-500 text-white shadow-lg shadow-mc-accent/20' 
+                      : 'bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white'"
+                    class="flex-1 py-2.5 px-3 rounded-xl text-sm font-medium transition-all duration-200 border border-gray-200 dark:border-white/5 whitespace-nowrap">
+                    {{ type.name }}
+                  </button>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Port</label>
+                  <input v-model.number="newServer.port" type="number" required
+                    class="input-field" />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Max Players</label>
+                  <input v-model.number="newServer.max_players" type="number" required
+                    class="input-field" />
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Version</label>
+                <select v-model="newServer.version" class="input-field" :disabled="versionsLoading">
+                  <option v-if="versionsLoading" value="">Loading versions...</option>
+                  <option v-else-if="versions.length === 0" value="">No versions available</option>
+                  <option v-for="v in versions" :key="v" :value="v">{{ v }}</option>
+                </select>
+              </div>
+
+              <div class="border-t border-gray-200 dark:border-white/5 pt-5">
+                <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Resources</h3>
+                <div class="grid grid-cols-2 gap-4 mb-3">
+                  <div>
+                    <label class="block text-xs text-gray-500 dark:text-gray-500 mb-1">Min RAM (MB)</label>
+                    <input v-model.number="newServer.ram_min" type="number" min="256" step="256" required
+                      class="input-field text-sm" />
+                  </div>
+                  <div>
+                    <label class="block text-xs text-gray-500 dark:text-gray-500 mb-1">Max RAM (MB)</label>
+                    <input v-model.number="newServer.ram_max" type="number" min="256" step="256" required
+                      class="input-field text-sm" />
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4 mb-3">
+                  <div>
+                    <label class="block text-xs text-gray-500 dark:text-gray-500 mb-1">CPU Cores</label>
+                    <input v-model.number="newServer.cpu_cores" type="number" min="1" max="16" required
+                      class="input-field text-sm" />
+                  </div>
+                  <div>
+                    <label class="block text-xs text-gray-500 dark:text-gray-500 mb-1">Swap (MB)</label>
+                    <input v-model.number="newServer.swap_mb" type="number" min="0" step="256" required
+                      class="input-field text-sm" />
+                  </div>
+                </div>
+                <div class="flex gap-2 flex-wrap">
+                  <button type="button" @click="setPreset(512, 1024, 1)" 
+                    class="text-xs bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 px-3 py-1.5 rounded-lg transition">512MB-1GB</button>
+                  <button type="button" @click="setPreset(1024, 2048, 2)" 
+                    class="text-xs bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 px-3 py-1.5 rounded-lg transition">1GB-2GB</button>
+                  <button type="button" @click="setPreset(2048, 4096, 4)" 
+                    class="text-xs bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 px-3 py-1.5 rounded-lg transition">2GB-4GB</button>
+                  <button type="button" @click="setPreset(4096, 8192, 4)" 
+                    class="text-xs bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 px-3 py-1.5 rounded-lg transition">4GB-8GB</button>
+                </div>
+              </div>
+
+              <div class="flex gap-3 pt-4">
+                <button type="button" @click="closeCreateModal" class="flex-1 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 py-3 rounded-xl transition">Cancel</button>
+                <button type="submit" :disabled="creating" class="flex-1 btn-primary">
+                  {{ creating ? 'Creating...' : 'Create' }}
                 </button>
               </div>
+            </form>
+          </template>
+
+          <template v-else>
+            <div class="mb-6 rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-100/70 dark:bg-white/5 p-4">
+              <p class="text-sm font-medium text-gray-800 dark:text-white">Import Pterodactyl egg JSON files to build servers from them.</p>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Upload a pearl JSON file, review the parsed startup and Docker image, then set RAM, CPU, port, and any template variables before creating the server.</p>
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
+            <input ref="pearlFileInput" type="file" accept=".json,application/json" class="hidden" @change="handlePearlUpload" />
+
+            <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Port</label>
-                <input v-model.number="newServer.port" type="number" required
-                  class="input-field" />
+                <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-200">Egg Import</h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                  {{ pearlData ? `${pearlData.name} loaded` : pearlFeature.can_upload ? 'No egg loaded yet' : 'Pick from the saved egg collection below' }}
+                </p>
               </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Max Players</label>
-                <input v-model.number="newServer.max_players" type="number" required
-                  class="input-field" />
-              </div>
-            </div>
-
-            <div>
-              <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Version</label>
-              <select v-model="newServer.version" class="input-field" :disabled="versionsLoading">
-                <option v-if="versionsLoading" value="">Loading versions...</option>
-                <option v-else-if="versions.length === 0" value="">No versions available</option>
-                <option v-for="v in versions" :key="v" :value="v">{{ v }}</option>
-              </select>
-            </div>
-
-            <div class="border-t border-gray-200 dark:border-white/5 pt-5">
-              <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Resources</h3>
-              <div class="grid grid-cols-2 gap-4 mb-3">
-                <div>
-                  <label class="block text-xs text-gray-500 dark:text-gray-500 mb-1">Min RAM (MB)</label>
-                  <input v-model.number="newServer.ram_min" type="number" min="256" step="256" required
-                    class="input-field text-sm" />
-                </div>
-                <div>
-                  <label class="block text-xs text-gray-500 dark:text-gray-500 mb-1">Max RAM (MB)</label>
-                  <input v-model.number="newServer.ram_max" type="number" min="256" step="256" required
-                    class="input-field text-sm" />
-                </div>
-              </div>
-              <div class="grid grid-cols-2 gap-4 mb-3">
-                <div>
-                  <label class="block text-xs text-gray-500 dark:text-gray-500 mb-1">CPU Cores</label>
-                  <input v-model.number="newServer.cpu_cores" type="number" min="1" max="16" required
-                    class="input-field text-sm" />
-                </div>
-                <div>
-                  <label class="block text-xs text-gray-500 dark:text-gray-500 mb-1">Swap (MB)</label>
-                  <input v-model.number="newServer.swap_mb" type="number" min="0" step="256" required
-                    class="input-field text-sm" />
-                </div>
-              </div>
-              <div class="flex gap-2 flex-wrap">
-                <button type="button" @click="setPreset(512, 1024, 1)" 
-                  class="text-xs bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 px-3 py-1.5 rounded-lg transition">512MB-1GB</button>
-                <button type="button" @click="setPreset(1024, 2048, 2)" 
-                  class="text-xs bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 px-3 py-1.5 rounded-lg transition">1GB-2GB</button>
-                <button type="button" @click="setPreset(2048, 4096, 4)" 
-                  class="text-xs bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 px-3 py-1.5 rounded-lg transition">2GB-4GB</button>
-                <button type="button" @click="setPreset(4096, 8192, 4)" 
-                  class="text-xs bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 px-3 py-1.5 rounded-lg transition">4GB-8GB</button>
-              </div>
-            </div>
-
-            <div class="flex gap-3 pt-4">
-              <button type="button" @click="showCreate = false" class="flex-1 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 py-3 rounded-xl transition">Cancel</button>
-              <button type="submit" :disabled="creating" class="flex-1 btn-primary">
-                {{ creating ? 'Creating...' : 'Create' }}
+              <button
+                v-if="pearlFeature.can_upload"
+                type="button"
+                @click="openPearlPicker"
+                :disabled="pearlParsing"
+                class="btn-primary px-4 py-2.5 disabled:opacity-60"
+              >
+                {{ pearlParsing ? 'Parsing...' : pearlData ? 'Replace Egg JSON' : 'Upload Egg JSON' }}
               </button>
             </div>
-          </form>
+
+            <div v-if="pearlFeature.admin_only_upload && !pearlFeature.can_upload" class="mb-5 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300">
+              Only admins can upload egg JSON files right now. You can still build servers from the saved egg collection below.
+            </div>
+
+            <div v-if="pearlError" class="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+              {{ pearlError }}
+            </div>
+
+            <form @submit.prevent="createPearlServer" class="space-y-6">
+              <div class="rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-100/70 dark:bg-white/5 p-4">
+                <div class="flex items-center justify-between gap-3 mb-4">
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-200">Saved Egg Collection</h4>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Choose from the Pterodactyl eggs already uploaded to the panel.</p>
+                  </div>
+                  <span class="text-xs text-gray-500 dark:text-gray-500">{{ pearlLibrary.length }} saved</span>
+                </div>
+
+                <div v-if="pearlLibraryLoading" class="text-sm text-gray-500 dark:text-gray-400">Loading eggs...</div>
+                <div v-else-if="pearlLibrary.length === 0" class="text-sm text-gray-500 dark:text-gray-400">
+                  No saved eggs yet.
+                </div>
+                <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  <button
+                    v-for="item in pearlLibrary"
+                    :key="item.id"
+                    type="button"
+                    @click="loadPearlFromLibrary(item.id)"
+                    class="text-left rounded-xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-black/20 px-4 py-4 hover:border-mc-accent/40 hover:bg-white dark:hover:bg-white/5 transition-all"
+                  >
+                    <div class="flex items-start justify-between gap-3">
+                      <div>
+                        <p class="font-semibold text-gray-900 dark:text-white">{{ item.name }}</p>
+                        <p v-if="item.description" class="mt-1 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">{{ item.description }}</p>
+                      </div>
+                      <span class="rounded-full bg-mc-accent/10 px-2.5 py-1 text-[11px] font-medium text-mc-accent">{{ item.server_type }}</span>
+                    </div>
+                    <div class="mt-3 flex flex-wrap gap-2 text-[11px] text-gray-500 dark:text-gray-400">
+                      <span class="rounded-full border border-gray-200 dark:border-white/10 px-2 py-1">{{ item.suggested_version || '1.21.11' }}</span>
+                      <span v-if="item.docker_image" class="rounded-full border border-gray-200 dark:border-white/10 px-2 py-1 font-mono">{{ item.docker_image }}</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="!pearlData" class="rounded-2xl border border-dashed border-gray-300 dark:border-white/10 px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                {{ pearlFeature.can_upload ? 'Upload an egg JSON file or pick one from the saved collection to start building a server from it.' : 'Pick a saved egg from the collection above to start building a server from it.' }}
+              </div>
+
+              <template v-else>
+                <div class="grid grid-cols-1 xl:grid-cols-[1.1fr,0.9fr] gap-6">
+                  <div class="space-y-5">
+                    <div class="rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-100/70 dark:bg-white/5 p-4">
+                      <div class="flex items-start justify-between gap-4">
+                        <div>
+                          <p class="text-xs uppercase tracking-[0.2em] text-gray-500 dark:text-gray-500">Imported Egg</p>
+                          <h3 class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ pearlData.name }}</h3>
+                          <p v-if="pearlData.description" class="mt-2 text-sm text-gray-600 dark:text-gray-300">{{ pearlData.description }}</p>
+                        </div>
+                        <span class="rounded-full bg-mc-accent/10 px-3 py-1 text-xs font-medium text-mc-accent">
+                          {{ pearlForm.server_type }}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Server Name</label>
+                      <input v-model="pearlForm.name" type="text" required placeholder="Imported Server"
+                        class="input-field" />
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Runtime Image</label>
+                        <select v-if="pearlForm.docker_images.length > 0" v-model="pearlForm.runtime_image" class="input-field">
+                          <option v-for="image in pearlForm.docker_images" :key="image.image" :value="image.image">
+                            {{ image.label }}
+                          </option>
+                        </select>
+                        <input v-else v-model="pearlForm.runtime_image" type="text" required placeholder="Docker image"
+                          class="input-field" />
+                      </div>
+                      <div>
+                        <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Minecraft Version</label>
+                        <input v-model="pearlForm.version" type="text" required class="input-field" />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Startup Command</label>
+                      <textarea v-model="pearlForm.startup" rows="5" class="input-field font-mono text-xs resize-y"></textarea>
+                    </div>
+
+                    <div v-if="editablePearlVariablesList().length > 0">
+                      <div class="flex items-center justify-between mb-3">
+                        <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-200">Template Variables</h4>
+                        <span class="text-xs text-gray-500 dark:text-gray-500">{{ editablePearlVariablesList().length }} field{{ editablePearlVariablesList().length !== 1 ? 's' : '' }}</span>
+                      </div>
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div v-for="variable in editablePearlVariablesList()" :key="variable.key">
+                          <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">{{ variable.name }}</label>
+                          <input
+                            v-model="pearlForm.variables[variable.key]"
+                            :type="isNumericPearlVariable(variable) ? 'number' : 'text'"
+                            class="input-field"
+                            :placeholder="variable.default_value || variable.key"
+                          />
+                          <p v-if="variable.description" class="mt-1 text-xs text-gray-500 dark:text-gray-500">{{ variable.description }}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="space-y-5">
+                    <div class="rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-100/70 dark:bg-white/5 p-4">
+                      <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">Resources</h4>
+                      <div class="grid grid-cols-2 gap-4 mb-3">
+                        <div>
+                          <label class="block text-xs text-gray-500 dark:text-gray-500 mb-1">Port</label>
+                          <input v-model.number="pearlForm.port" type="number" required class="input-field text-sm" />
+                        </div>
+                        <div>
+                          <label class="block text-xs text-gray-500 dark:text-gray-500 mb-1">Max Players</label>
+                          <input v-model.number="pearlForm.max_players" type="number" required class="input-field text-sm" />
+                        </div>
+                      </div>
+                      <div class="grid grid-cols-2 gap-4 mb-3">
+                        <div>
+                          <label class="block text-xs text-gray-500 dark:text-gray-500 mb-1">Min RAM (MB)</label>
+                          <input v-model.number="pearlForm.ram_min" type="number" min="256" step="256" required class="input-field text-sm" />
+                        </div>
+                        <div>
+                          <label class="block text-xs text-gray-500 dark:text-gray-500 mb-1">Max RAM (MB)</label>
+                          <input v-model.number="pearlForm.ram_max" type="number" min="256" step="256" required class="input-field text-sm" />
+                        </div>
+                      </div>
+                      <div class="grid grid-cols-2 gap-4 mb-3">
+                        <div>
+                          <label class="block text-xs text-gray-500 dark:text-gray-500 mb-1">CPU Cores</label>
+                          <input v-model.number="pearlForm.cpu_cores" type="number" min="1" max="16" required class="input-field text-sm" />
+                        </div>
+                        <div>
+                          <label class="block text-xs text-gray-500 dark:text-gray-500 mb-1">Swap (MB)</label>
+                          <input v-model.number="pearlForm.swap_mb" type="number" min="0" step="256" required class="input-field text-sm" />
+                        </div>
+                      </div>
+                      <div class="flex gap-2 flex-wrap">
+                        <button type="button" @click="setPearlPreset(1024, 2048, 2)" class="text-xs bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:hover:bg-white/15 px-3 py-1.5 rounded-lg transition">1GB-2GB</button>
+                        <button type="button" @click="setPearlPreset(2048, 4096, 4)" class="text-xs bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:hover:bg-white/15 px-3 py-1.5 rounded-lg transition">2GB-4GB</button>
+                        <button type="button" @click="setPearlPreset(4096, 8192, 4)" class="text-xs bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:hover:bg-white/15 px-3 py-1.5 rounded-lg transition">4GB-8GB</button>
+                      </div>
+                    </div>
+
+                    <div class="rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-100/70 dark:bg-white/5 p-4">
+                      <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">Template Runtime</h4>
+                      <div class="space-y-4">
+                        <div>
+                          <label class="block text-xs text-gray-500 dark:text-gray-500 mb-1">Base Server Type</label>
+                          <select v-model="pearlForm.server_type" class="input-field text-sm">
+                            <option v-for="type in serverTypes" :key="type.id" :value="type.id">{{ type.name }}</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label class="block text-xs text-gray-500 dark:text-gray-500 mb-1">MOTD</label>
+                          <input v-model="pearlForm.motd" type="text" class="input-field text-sm" />
+                        </div>
+                        <p class="text-xs text-gray-500 dark:text-gray-500">
+                          {{ pearlForm.install_script ? 'This pearl includes an install script and will run it in a helper container when the server is created.' : 'This pearl does not include an install script, so only the startup command and runtime image will be applied.' }}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex gap-3 pt-2">
+                  <button type="button" @click="closeCreateModal" class="flex-1 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 py-3 rounded-xl transition">Cancel</button>
+                  <button type="submit" :disabled="creating || pearlParsing" class="flex-1 btn-primary">
+                    {{ creating ? 'Importing...' : 'Create from Egg' }}
+                  </button>
+                </div>
+              </template>
+            </form>
+          </template>
         </div>
       </div>
     </transition>
@@ -353,7 +589,20 @@ const deleting = ref(false)
 const showEulaModal = ref(false)
 const eulaServer = ref(null)
 const acceptingEula = ref(false)
+const createMode = ref('quick')
+const pearlFileInput = ref(null)
+const pearlParsing = ref(false)
+const pearlError = ref('')
+const pearlData = ref(null)
+const pearlFeature = ref({
+  enabled: true,
+  admin_only_upload: false,
+  can_upload: true,
+})
+const pearlLibrary = ref([])
+const pearlLibraryLoading = ref(false)
 const newServer = ref({ name: '', server_type: 'paper', port: 25565, max_players: 20, version: '', ram_min: 512, ram_max: 1024, cpu_cores: 1, swap_mb: 512 })
+const pearlForm = ref(createEmptyPearlForm())
 
 const serverTypes = [
   { id: 'paper', name: 'Paper' },
@@ -368,6 +617,106 @@ const versionsLoading = ref(false)
 const versionWarning = ref('')
 const versionCache = {}
 const currentHost = window.location.hostname || 'localhost'
+
+function createEmptyQuickServer() {
+  return { name: '', server_type: 'paper', port: 25565, max_players: 20, version: '', ram_min: 512, ram_max: 1024, cpu_cores: 1, swap_mb: 512 }
+}
+
+function createEmptyPearlForm() {
+  return {
+    name: '',
+    pearl_name: '',
+    library_id: null,
+    description: '',
+    server_type: 'paper',
+    port: 25565,
+    max_players: 20,
+    version: '1.21.11',
+    motd: 'A Minecraft Server',
+    ram_min: 1024,
+    ram_max: 2048,
+    cpu_cores: 2,
+    swap_mb: 1024,
+    runtime_image: '',
+    install_container: '',
+    install_script: '',
+    startup: '',
+    variables: {},
+    docker_images: [],
+  }
+}
+
+function resetQuickCreateForm() {
+  newServer.value = createEmptyQuickServer()
+  const paperVersions = versionCache.paper || versions.value
+  if (paperVersions.length > 0) {
+    newServer.value.version = paperVersions[0]
+  }
+}
+
+function resetPearlForm() {
+  pearlParsing.value = false
+  pearlError.value = ''
+  pearlData.value = null
+  pearlForm.value = createEmptyPearlForm()
+  if (pearlFileInput.value) {
+    pearlFileInput.value.value = ''
+  }
+}
+
+function closeCreateModal() {
+  showCreate.value = false
+  creating.value = false
+  downloadStatus.value = ''
+  createMode.value = 'quick'
+  resetQuickCreateForm()
+  resetPearlForm()
+  versionWarning.value = ''
+}
+
+function editablePearlVariablesList() {
+  return (pearlData.value?.variables || []).filter((variable) => variable.user_editable || variable.user_viewable)
+}
+
+function isNumericPearlVariable(variable) {
+  return /integer|numeric|digits|number/i.test(variable.rules || '') || /PORT|MEMORY|PLAYERS|CPU|SWAP/i.test(variable.key || '')
+}
+
+function openPearlPicker() {
+  pearlFileInput.value?.click()
+}
+
+async function fetchPearlFeature() {
+  try {
+    const res = await axios.get('/api/servers/pearls/config')
+    pearlFeature.value = res.data
+    if (!res.data.enabled && createMode.value === 'pearl') {
+      createMode.value = 'quick'
+    }
+  } catch (e) {
+    pearlFeature.value = {
+      enabled: false,
+      admin_only_upload: false,
+      can_upload: false,
+    }
+  }
+}
+
+async function fetchPearlLibrary() {
+  if (!pearlFeature.value.enabled) {
+    pearlLibrary.value = []
+    return
+  }
+  pearlLibraryLoading.value = true
+  try {
+    const res = await axios.get('/api/servers/pearls/library')
+    pearlLibrary.value = res.data.pearls || []
+  } catch (e) {
+    pearlLibrary.value = []
+  } finally {
+    pearlLibraryLoading.value = false
+  }
+}
 
 function createStatusLabel() {
   if (newServer.value.server_type === 'forge' || newServer.value.server_type === 'neoforge') {
@@ -423,6 +772,79 @@ function setPreset(min, max, cores) {
   newServer.value.swap_mb = Math.max(512, Math.floor(max / 2))
 }
 
+function setPearlPreset(min, max, cores) {
+  pearlForm.value.ram_min = min
+  pearlForm.value.ram_max = max
+  pearlForm.value.cpu_cores = cores
+  pearlForm.value.swap_mb = Math.max(512, Math.floor(max / 2))
+}
+
+function hydratePearlForm(data) {
+  const variables = {}
+  for (const variable of data.variables || []) {
+    variables[variable.key] = variable.default_value || ''
+  }
+  pearlData.value = data
+  pearlForm.value = {
+    name: data.name || 'Imported Server',
+    pearl_name: data.name || 'Imported Egg',
+    library_id: data.id || null,
+    description: data.description || '',
+    server_type: data.inferred_server_type || 'paper',
+    port: 25565,
+    max_players: 20,
+    version: data.suggested_version || '1.21.11',
+    motd: 'A Minecraft Server',
+    ram_min: 1024,
+    ram_max: 2048,
+    cpu_cores: 2,
+    swap_mb: 1024,
+    runtime_image: data.docker_images?.[0]?.image || '',
+    install_container: data.install_container || '',
+    install_script: data.install_script || '',
+    startup: data.startup || '',
+    variables,
+    docker_images: data.docker_images || [],
+  }
+}
+
+async function loadPearlFromLibrary(pearlId) {
+  pearlError.value = ''
+  pearlParsing.value = true
+  try {
+    const res = await axios.get(`/api/servers/pearls/library/${pearlId}`)
+    hydratePearlForm(res.data)
+  } catch (e) {
+    pearlError.value = e.response?.data?.detail || 'Failed to load that saved egg.'
+  } finally {
+    pearlParsing.value = false
+  }
+}
+
+async function handlePearlUpload(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+
+  pearlParsing.value = true
+  pearlError.value = ''
+  pearlData.value = null
+
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await axios.post('/api/servers/pearls/library', formData)
+    hydratePearlForm(res.data)
+    await fetchPearlLibrary()
+    toast({ title: 'Egg Saved', message: `${res.data.name} was added to the egg collection.`, type: 'success' })
+  } catch (e) {
+    pearlError.value = e.response?.data?.detail || 'Failed to parse the egg JSON file.'
+    resetPearlForm()
+    pearlError.value = e.response?.data?.detail || 'Failed to parse the egg JSON file.'
+  } finally {
+    pearlParsing.value = false
+  }
+}
+
 async function fetchServers() {
   loading.value = true
   try {
@@ -451,10 +873,7 @@ async function createServer() {
       toast({ title: 'Download Failed', message: res.data.download_error || 'Failed to download server.jar', type: 'error' })
     }
     setTimeout(() => {
-      showCreate.value = false
-      downloadStatus.value = ''
-      creating.value = false
-      newServer.value = { name: '', server_type: 'paper', port: 25565, max_players: 20, version: '', ram_min: 512, ram_max: 1024, cpu_cores: 1, swap_mb: 512 }
+      closeCreateModal()
     }, 1500)
     await fetchServers()
   } catch (e) {
@@ -465,6 +884,52 @@ async function createServer() {
       message: e.response?.data?.detail || e.message || 'Please try again.',
       type: 'error'
     })
+  }
+}
+
+async function createPearlServer() {
+  if (!pearlData.value) {
+    pearlError.value = 'Upload an egg JSON file first.'
+    return
+  }
+
+  creating.value = true
+  pearlError.value = ''
+  try {
+    const payload = {
+      library_id: pearlForm.value.library_id || null,
+      name: pearlForm.value.name,
+      pearl_name: pearlForm.value.pearl_name || pearlData.value.name,
+      server_type: pearlForm.value.server_type,
+      port: pearlForm.value.port,
+      max_players: pearlForm.value.max_players,
+      version: pearlForm.value.version,
+      motd: pearlForm.value.motd,
+      ram_min: pearlForm.value.ram_min,
+      ram_max: pearlForm.value.ram_max,
+      cpu_cores: pearlForm.value.cpu_cores,
+      swap_mb: pearlForm.value.swap_mb,
+      runtime_image: pearlForm.value.runtime_image,
+      install_container: pearlForm.value.install_container || null,
+      install_script: pearlForm.value.install_script || null,
+      startup: pearlForm.value.startup,
+      variables: pearlForm.value.variables,
+    }
+    const res = await axios.post('/api/servers/pearls', payload)
+    if (res.data.port_changed) {
+      toast({ title: `Port ${res.data.original_port} was in use`, message: `Server created on port ${res.data.port}.`, type: 'warning' })
+    }
+    if (res.data.install_error) {
+      toast({ title: 'Egg Imported with Installer Warning', message: res.data.install_error, type: 'warning' })
+    } else {
+      toast({ title: 'Egg Imported', message: `${res.data.pearl_name || pearlForm.value.pearl_name} is ready.`, type: 'success' })
+    }
+    await fetchServers()
+    closeCreateModal()
+  } catch (e) {
+    pearlError.value = e.response?.data?.detail || 'Failed to create server from egg.'
+  } finally {
+    creating.value = false
   }
 }
 
@@ -553,6 +1018,7 @@ async function deleteServer() {
 onMounted(() => {
   fetchServers()
   fetchVersions('paper')
+  fetchPearlFeature().then(fetchPearlLibrary)
 })
 </script>
 

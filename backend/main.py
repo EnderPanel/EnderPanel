@@ -6,6 +6,8 @@ import socket
 import subprocess
 import signal
 import time
+import textwrap
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,11 +17,13 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from database import engine, Base, SessionLocal
-from routes import auth_router, servers_router, console_router, files_router, players_router, plugins_router, settings_router, users_router, avatars_router, admin_router, update_router, playit_runtime_router, server_network_router, sftp_router
+from models import PanelSetting
+from routes import auth_router, servers_router, console_router, files_router, players_router, plugins_router, settings_router, users_router, avatars_router, admin_router, update_router, domain_runtime_router, playit_runtime_router, server_network_router, sftp_router, tasks_router
 from config import SERVERS_DIR, BASE_DIR
 from utils.docker_client import close_docker_client, get_docker_client
 from utils.docker_cleanup import remove_container_if_exists
 from utils.http_compat import patch_http_response_close
+from routes.tasks import run_due_server_tasks_once
 
 patch_http_response_close()
 
@@ -37,6 +41,15 @@ def run_migrations():
         ("users", "playit_claim_id", "VARCHAR(64) NULL"),
         ("users", "playit_agent_id", "VARCHAR(128) NULL"),
         ("users", "playit_agent_secret", "VARCHAR(255) NULL"),
+        ("users", "theme", "VARCHAR(32) NULL"),
+        ("users", "dqs_layout", "VARCHAR(16) NULL"),
+        ("users", "welcome_completed", "INTEGER NOT NULL DEFAULT 0"),
+        ("server_tasks", "schedule_mode", "VARCHAR(20) NOT NULL DEFAULT 'interval'"),
+        ("server_tasks", "run_time", "VARCHAR(5) NULL"),
+        ("server_tasks", "run_days", "VARCHAR(32) NULL"),
+        ("servers", "public_domain_enabled", "INTEGER NOT NULL DEFAULT 0"),
+        ("servers", "public_domain_subdomain", "VARCHAR(63) NULL"),
+        ("servers", "public_domain", "VARCHAR(255) NULL"),
     ]
     with engine.connect() as conn:
         for table, column, definition in migrations:
@@ -54,6 +67,38 @@ def run_migrations():
                 print(f"Migration: added column '{column}' to '{table}'")
 
 run_migrations()
+
+
+def ensure_panel_setting_defaults():
+    db = SessionLocal()
+    try:
+        defaults = {
+            "upload_limit_mb": os.getenv("ENDERPANEL_UPLOAD_LIMIT_MB", "100"),
+            "pearls_enabled": "1",
+            "pearls_admin_only_upload": "0",
+            "public_domain_enabled": "0",
+            "public_domain_service_url": "https://vercel-playit-api.vercel.app/api/cloudflare",
+            "public_domain_base_domain": "",
+            "public_domain_target_host": "",
+            "public_domain_service_token": "",
+        }
+        changed = False
+        for key, value in defaults.items():
+            existing = db.query(PanelSetting).filter(PanelSetting.key == key).first()
+            if existing:
+                continue
+            db.add(PanelSetting(key=key, value=value))
+            changed = True
+        if changed:
+            db.commit()
+    except Exception as exc:
+        db.rollback()
+        print(f"Panel setting defaults skipped: {exc}")
+    finally:
+        db.close()
+
+
+ensure_panel_setting_defaults()
 
 
 def run_security_backfills():
@@ -87,6 +132,80 @@ DIST_DIR = os.path.join(BASE_DIR, "..", "frontend", "dist")
 FRONTEND_DIR = os.path.join(BASE_DIR, "..", "frontend")
 BRANDING_DIR = os.path.join(BASE_DIR, "branding")
 DIST_INDEX = os.path.join(DIST_DIR, "index.html")
+
+ANSI_RESET = "\033[0m"
+ANSI_STYLES = {
+    "info": "\033[96m",
+    "success": "\033[92m",
+    "warning": "\033[93m",
+    "error": "\033[91m",
+    "accent": "\033[95m",
+}
+
+
+def _ansi_enabled() -> bool:
+    if not os.isatty(1):
+        return False
+    if os.name != "nt":
+        return True
+    return bool(
+        os.getenv("WT_SESSION")
+        or os.getenv("ANSICON")
+        or os.getenv("ConEmuANSI") == "ON"
+        or os.getenv("TERM_PROGRAM")
+    )
+
+
+def _style(text: str, tone: str) -> str:
+    if not _ansi_enabled():
+        return text
+    return f"{ANSI_STYLES.get(tone, '')}{text}{ANSI_RESET}"
+
+
+def set_terminal_title(title: str) -> None:
+    if not os.isatty(1):
+        return
+    try:
+        print(f"\33]0;{title}\a", end="", flush=True)
+    except Exception:
+        pass
+
+
+def get_local_network_ip() -> str | None:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))
+            ip = sock.getsockname()[0]
+        if ip and not ip.startswith("127."):
+            return ip
+    except Exception:
+        return None
+    return None
+
+
+def print_access_hints(port: int, label: str = "Open EnderPanel") -> None:
+    localhost_url = f"http://localhost:{port}"
+    print(_style(f"[{label}] This device: {localhost_url}", "accent"))
+
+    local_ip = get_local_network_ip()
+    if local_ip:
+        print(_style(f"[{label}] Phone / same Wi-Fi: http://{local_ip}:{port}", "accent"))
+
+
+def print_panel(title: str, lines: list[str], tone: str = "info") -> None:
+    wrapped_lines: list[str] = []
+    for line in lines:
+        wrapped = textwrap.wrap(line, width=72) or [""]
+        wrapped_lines.extend(wrapped)
+
+    content_width = max(len(title), *(len(line) for line in wrapped_lines), 24)
+    border = f"+-{'-' * content_width}-+"
+    print(_style(border, tone))
+    print(_style(f"| {title.ljust(content_width)} |", tone))
+    print(_style(border, tone))
+    for line in wrapped_lines:
+        print(f"| {line.ljust(content_width)} |")
+    print(_style(border, tone))
 
 
 def stop_managed_containers_on_shutdown() -> None:
@@ -125,16 +244,58 @@ def stop_managed_containers_on_shutdown() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    scheduler_stop = asyncio.Event()
+
+    async def scheduler_loop():
+        while not scheduler_stop.is_set():
+            try:
+                await run_due_server_tasks_once()
+            except Exception as exc:
+                print(f"Task scheduler warning: {exc}")
+
+            try:
+                await asyncio.wait_for(scheduler_stop.wait(), timeout=15)
+            except asyncio.TimeoutError:
+                continue
+
+    scheduler_task = asyncio.create_task(scheduler_loop())
     try:
         if should_start_frontend_dev_server():
             start_frontend_dev_server(FRONTEND_DIR, 3000)
         elif os.path.exists(DIST_INDEX):
-            print("Using built frontend from frontend/dist; open http://localhost:8000")
+            local_ip = get_local_network_ip()
+            title = "EnderPanel - http://localhost:8000"
+            if local_ip:
+                title = f"{title} | http://{local_ip}:8000"
+            set_terminal_title(title)
+            print_panel(
+                "EnderPanel Startup",
+                [
+                    "Everything looks ready.",
+                    "Open EnderPanel in your browser.",
+                    "A same-Wi-Fi phone can use the local network address shown below.",
+                ],
+                tone="success",
+            )
+            print_access_hints(8000)
     except Exception as e:
-        print(f"Warning: Failed to start frontend dev server: {e}")
+        print_panel(
+            "Frontend Setup Warning",
+            [
+                "EnderPanel could not prepare the frontend automatically.",
+                f"Details: {e}",
+            ],
+            tone="warning",
+        )
     try:
         yield
     finally:
+        scheduler_stop.set()
+        scheduler_task.cancel()
+        try:
+            await scheduler_task
+        except asyncio.CancelledError:
+            pass
         stop_managed_containers_on_shutdown()
         close_docker_client()
 
@@ -196,9 +357,11 @@ app.include_router(users_router)
 app.include_router(avatars_router)
 app.include_router(admin_router)
 app.include_router(update_router)
+app.include_router(domain_runtime_router)
 app.include_router(playit_runtime_router)
 app.include_router(server_network_router)
 app.include_router(sftp_router)
+app.include_router(tasks_router)
 
 os.makedirs(SERVERS_DIR, exist_ok=True)
 os.makedirs(BRANDING_DIR, exist_ok=True)
@@ -408,28 +571,59 @@ def _confirm_kill_port_process(port: int) -> bool:
         return False
 
     if not os.isatty(0):
-        print(f"Port {port} is already in use by PID(s): {', '.join(str(pid) for pid in pids)}; frontend dev server will not be started.")
+        print_panel(
+            "Frontend Port Busy",
+            [
+                f"Port {port} is already being used by PID(s): {', '.join(str(pid) for pid in pids)}.",
+                "EnderPanel will leave that process alone and skip starting the frontend dev server.",
+            ],
+            tone="warning",
+        )
         return False
 
-    answer = input(
-        f"Port {port} is already in use by PID(s): {', '.join(str(pid) for pid in pids)}. "
-        f"Kill the process{'es' if len(pids) != 1 else ''} using port {port}? [y/N]: "
-    ).strip().lower()
+    print_panel(
+        "Frontend Port Busy",
+        [
+            f"Port {port} is already being used by PID(s): {', '.join(str(pid) for pid in pids)}.",
+            f"Do you want EnderPanel to close the process{'es' if len(pids) != 1 else ''} using port {port} so it can start the frontend?",
+        ],
+        tone="warning",
+    )
+    answer = input(_style("> Close the process and continue? [y/N]: ", "accent")).strip().lower()
     if answer not in {"y", "yes"}:
-        print(f"Keeping existing process on port {port}; frontend dev server will not be started.")
+        print_panel(
+            "Frontend Not Started",
+            [f"No problem — EnderPanel will keep the existing process on port {port} and continue without starting the frontend dev server."],
+            tone="info",
+        )
         return False
 
     if not _kill_processes_using_port(port):
-        print(f"Failed to free port {port}; frontend dev server will not be started.")
+        print_panel(
+            "Frontend Not Started",
+            [f"EnderPanel could not free port {port}, so the frontend dev server was not started."],
+            tone="error",
+        )
         return False
 
-    print(f"Freed port {port}; starting frontend dev server.")
+    print_panel(
+        "Port Cleared",
+        [f"Port {port} is free now. Starting the frontend dev server."],
+        tone="success",
+    )
     return True
 
 
 def start_frontend_dev_server(frontend_dir: str, port: int = 3000) -> None:
     if not os.path.exists(frontend_dir):
-        print(f"Frontend directory not found: {frontend_dir}")
+        print_panel(
+            "Frontend Not Found",
+            [
+                "EnderPanel could not find the frontend folder.",
+                f"Expected location: {frontend_dir}",
+            ],
+            tone="error",
+        )
         return
 
     npm_executable = shutil.which("npm.cmd") if os.name == "nt" else None
@@ -437,19 +631,34 @@ def start_frontend_dev_server(frontend_dir: str, port: int = 3000) -> None:
         npm_executable = shutil.which("npm")
 
     if not npm_executable:
-        print("npm not found: frontend dev server will not be started automatically.")
+        print_panel(
+            "Frontend Not Started",
+            ["npm was not found, so EnderPanel cannot start the frontend dev server automatically."],
+            tone="warning",
+        )
         return
 
     package_json = os.path.join(frontend_dir, "package.json")
     if not os.path.exists(package_json):
-        print(f"package.json not found in frontend directory: {frontend_dir}")
+        print_panel(
+            "Frontend Not Started",
+            [
+                "EnderPanel found the frontend folder, but package.json is missing.",
+                f"Folder checked: {frontend_dir}",
+            ],
+            tone="warning",
+        )
         return
 
     if not is_port_available(port):
         if port == 3000 and not _confirm_kill_port_process(port):
             return
         if not is_port_available(port):
-            print(f"Port {port} is already in use; frontend dev server will not be started.")
+            print_panel(
+                "Frontend Not Started",
+                [f"Port {port} is still in use, so the frontend dev server was not started."],
+                tone="warning",
+            )
             return
 
     npm_cmd = [npm_executable, "run", "dev", "--", "--host", "0.0.0.0", "--port", str(port)]
@@ -460,7 +669,14 @@ def start_frontend_dev_server(frontend_dir: str, port: int = 3000) -> None:
         popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
 
     try:
-        print(f"Starting frontend dev server on port {port}...")
+        print_panel(
+            "Starting Frontend",
+            [
+                f"EnderPanel is starting the frontend dev server on port {port}.",
+                "This usually takes a moment.",
+            ],
+            tone="info",
+        )
         subprocess.Popen(
             npm_cmd,
             cwd=frontend_dir,
@@ -469,9 +685,29 @@ def start_frontend_dev_server(frontend_dir: str, port: int = 3000) -> None:
             stderr=subprocess.STDOUT,
             **popen_kwargs,
         )
-        print(f"Started frontend dev server; open http://localhost:{port} or http://<this-machine-ip>:{port}")
+        local_ip = get_local_network_ip()
+        title = f"EnderPanel Frontend - http://localhost:{port}"
+        if local_ip:
+            title = f"{title} | http://{local_ip}:{port}"
+        set_terminal_title(title)
+        print_panel(
+            "Frontend Ready",
+            [
+                "The frontend dev server is ready.",
+                "This device and any phone on the same Wi-Fi can use the addresses below.",
+            ],
+            tone="success",
+        )
+        print_access_hints(port, label="Open Frontend")
     except Exception as exc:
-        print(f"Failed to start frontend dev server: {exc}")
+        print_panel(
+            "Frontend Start Failed",
+            [
+                "EnderPanel could not start the frontend dev server.",
+                f"Details: {exc}",
+            ],
+            tone="error",
+        )
 
 
 def should_start_frontend_dev_server() -> bool:

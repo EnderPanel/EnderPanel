@@ -13,6 +13,9 @@ class User(Base):
     is_admin: Mapped[bool] = Column(Boolean, default=False)
     avatar: Mapped[Optional[str]] = Column(String(255), nullable=True)
     totp_secret: Mapped[Optional[str]] = Column(String(32), nullable=True)
+    theme: Mapped[Optional[str]] = Column(String(32), nullable=True, default="dark")
+    dqs_layout: Mapped[Optional[str]] = Column(String(16), nullable=True)
+    welcome_completed: Mapped[bool] = Column(Boolean, default=False)
     playit_agent_id: Mapped[Optional[str]] = Column(String(128), nullable=True)
     _playit_agent_secret: Mapped[Optional[str]] = Column("playit_agent_secret", String(255), nullable=True)
 

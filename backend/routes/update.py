@@ -2,6 +2,7 @@ import os
 import json
 import shutil
 import tempfile
+import re
 import httpx
 import tarfile
 from fastapi import APIRouter, Depends, HTTPException
@@ -16,7 +17,13 @@ VERSION_FILE = os.path.join(BASE_DIR, "VERSION")
 CONFIG_FILE = os.path.join(BASE_DIR, "backend", "data", "config.json")
 
 DEFAULT_CONFIG = {
-    "update_server": "https://enderpanel.space"
+    "update_server": "https://raw.githubusercontent.com/EnderPanel/Releases/main"
+}
+
+GITHUB_RELEASES_BASE = "https://raw.githubusercontent.com/EnderPanel/Releases/main"
+LEGACY_UPDATE_BASES = {
+    "https://enderpanel.space",
+    "http://enderpanel.space",
 }
 
 def load_config():
@@ -34,6 +41,10 @@ def save_config(config):
 def get_urls():
     config = load_config()
     base = config.get("update_server", "https://enderpanel.space").rstrip("/")
+    if base in LEGACY_UPDATE_BASES:
+        base = GITHUB_RELEASES_BASE
+    if "raw.githubusercontent.com/EnderPanel/Releases/main" in base or "github.com/EnderPanel/Releases/raw/main" in base:
+        return f"{base}/latest.txt", f"{base}/enderpanel-{{}}.tar.gz"
     return f"{base}/latest.txt", f"{base}/releases/enderpanel-{{}}.tar.gz"
 
 def get_current_version():
@@ -42,6 +53,24 @@ def get_current_version():
             return version_file.read().strip()
     except Exception:
         return "0.0.0"
+
+
+def parse_version(value: str) -> tuple[int, ...]:
+    parts = re.findall(r"\d+", (value or "").strip())
+    if not parts:
+        return tuple()
+    return tuple(int(part) for part in parts)
+
+
+def is_newer_version(latest: str, current: str) -> bool:
+    latest_parts = parse_version(latest)
+    current_parts = parse_version(current)
+    if not latest_parts:
+        return False
+    length = max(len(latest_parts), len(current_parts))
+    latest_parts += (0,) * (length - len(latest_parts))
+    current_parts += (0,) * (length - len(current_parts))
+    return latest_parts > current_parts
 
 
 def _path_inside(root: str, target: str) -> bool:
@@ -79,7 +108,7 @@ async def check_update():
             r.raise_for_status()
             latest = r.text.strip()
             current = get_current_version()
-            return {"current": current, "latest": latest, "update_available": latest != current}
+            return {"current": current, "latest": latest, "update_available": is_newer_version(latest, current)}
     except Exception:
         return {"current": get_current_version(), "latest": "unknown", "update_available": False}
 
@@ -93,6 +122,10 @@ async def install_update(current_user: User = Depends(get_current_user)):
             r = await c.get(latest_url)
             r.raise_for_status()
             latest = r.text.strip()
+            current = get_current_version()
+
+            if not is_newer_version(latest, current):
+                return {"status": "current", "version": current}
 
             download_url = download_url_template.format(latest)
             r = await c.get(download_url)
@@ -114,7 +147,7 @@ async def install_update(current_user: User = Depends(get_current_user)):
 
                 # Files/dirs to preserve (user data)
                 skip_dirs = {"servers", "avatars", "__pycache__"}
-                skip_files = {"mcpanel.db", ".secret_key", ".data_encryption_key"}
+                skip_files = {"mcpanel.db", "enderpanel.db", ".secret_key", ".data_encryption_key"}
 
                 def copytree_skip(src, dst):
                     """Copy directory, skipping user data."""

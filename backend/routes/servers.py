@@ -11,18 +11,22 @@ import platform
 import subprocess
 import stat
 import time
+import json
+import uuid
 from datetime import datetime
 from docker.errors import NotFound as DockerNotFound
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, UploadFile, File
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field, field_validator, model_validator
-from typing import Optional
+from typing import Optional, Any
 from database import get_db
 from models.user import User
 from models.server import Server
+from models.panel_setting import PanelSetting
 from utils.security import get_current_user
-from config import SERVERS_DIR
-from .playit_runtime import ensure_playit_tunnel, start_playit_container, stop_playit_container
+from config import SERVERS_DIR, PEARLS_DIR
+from .domain_runtime import delete_public_domain_record
+from .playit_runtime import stop_playit_container, start_playit_container, ensure_playit_tunnel, read_playit_secret_from_disk
 from .sftp import cleanup_sftp_server_artifacts
 from utils.docker_client import get_docker_client
 from utils.docker_cleanup import IS_DOCKER_DESKTOP_HOST, remove_container_if_exists
@@ -51,6 +55,16 @@ MAX_SERVER_PORT = 65535
 MAX_RAM_MB = 65536
 MAX_SWAP_MB = 65536
 MAX_CPU_CORES = 64
+PEARL_MANIFEST = ".enderpanel-pearl.json"
+PEARL_INSTALL_SCRIPT = ".enderpanel-pearl-install.sh"
+PEARLS_ENABLED_KEY = "pearls_enabled"
+PEARLS_ADMIN_ONLY_UPLOAD_KEY = "pearls_admin_only_upload"
+PEARL_ALLOWED_RUNTIME_PLACEHOLDERS = {
+    "SERVER_MEMORY": "{ram_max}",
+    "SERVER_MEMORY_MB": "{ram_max}",
+    "SERVER_PORT": "{port}",
+    "SERVER_MAX_PLAYERS": "{max_players}",
+}
 
 def sanitize(n: str) -> str:
     return re.sub(r'[^a-zA-Z0-9_-]', '_', n)
@@ -63,6 +77,31 @@ def cname(sid: int) -> str:
 
 def dc():
     return get_docker_client()
+
+
+def runtime_uid_gid() -> tuple[int, int]:
+    try:
+        uid = os.getuid()
+    except AttributeError:
+        uid = 1000
+
+    try:
+        gid = os.getgid()
+    except AttributeError:
+        gid = 1000
+
+    # Never run the Minecraft process as root inside the container.
+    if uid <= 0:
+        uid = 1000
+    if gid <= 0:
+        gid = 1000
+
+    return uid, gid
+
+
+def runtime_user_spec() -> str:
+    uid, gid = runtime_uid_gid()
+    return f"{uid}:{gid}"
 
 
 def helper_container_name(purpose: str) -> str:
@@ -82,6 +121,14 @@ def managed_container_server_id(container_name: str) -> int | None:
 
 def eula_file(sid: int, name: str) -> str:
     return os.path.join(sdir(sid, name), "eula.txt")
+
+
+def pearl_manifest_file(sid: int, name: str) -> str:
+    return os.path.join(sdir(sid, name), PEARL_MANIFEST)
+
+
+def pearl_install_script_file(path: str) -> str:
+    return os.path.join(path, PEARL_INSTALL_SCRIPT)
 
 
 def has_accepted_eula(sid: int, name: str) -> bool:
@@ -124,6 +171,13 @@ def image_for_mc(mc_version: str) -> str:
 
 def java_cmd(version: str) -> str:
     return "/opt/java/openjdk/bin/java"
+
+
+def terminal_jvm_args() -> list[str]:
+    return [
+        "-Dterminal.jline=false",
+        "-Dterminal.ansi=true",
+    ]
 
 
 def ensure_runtime_images(client) -> None:
@@ -205,6 +259,280 @@ def extract_neoforge_mc_version(value: str) -> str | None:
 def unique_versions_desc(values: list[str]) -> list[str]:
     deduped = {value for value in values if value}
     return sorted(deduped, key=version_sort_key, reverse=True)
+
+
+def normalize_pearl_text(value: Any, default: str = "") -> str:
+    if value is None:
+        return default
+    if isinstance(value, (dict, list)):
+        return default
+    text = str(value).strip()
+    return text or default
+
+
+def extract_pearl_root(payload: dict[str, Any]) -> dict[str, Any]:
+    if isinstance(payload.get("attributes"), dict):
+        return payload["attributes"]
+    return payload
+
+
+def normalize_pearl_docker_images(raw: Any) -> list[dict[str, str]]:
+    images: list[dict[str, str]] = []
+    if isinstance(raw, dict):
+        for key, value in raw.items():
+            key_text = normalize_pearl_text(key)
+            value_text = normalize_pearl_text(value)
+            if not key_text and not value_text:
+                continue
+            if "/" in key_text or ":" in key_text:
+                image = key_text
+                label = value_text or key_text
+            else:
+                image = value_text or key_text
+                label = key_text or image
+            if image:
+                images.append({"label": label, "image": image})
+    elif isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, dict):
+                image = normalize_pearl_text(item.get("image") or item.get("value") or item.get("docker_image"))
+                label = normalize_pearl_text(item.get("label") or item.get("name"), image)
+            else:
+                image = normalize_pearl_text(item)
+                label = image
+            if image:
+                images.append({"label": label, "image": image})
+    elif isinstance(raw, str):
+        value = raw.strip()
+        if value:
+            images.append({"label": value, "image": value})
+
+    deduped: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for item in images:
+        if item["image"] in seen:
+            continue
+        seen.add(item["image"])
+        deduped.append(item)
+    return deduped
+
+
+def normalize_pearl_variables(raw: Any) -> list[dict[str, Any]]:
+    items: list[Any] = []
+    if isinstance(raw, list):
+        items = raw
+    elif isinstance(raw, dict) and isinstance(raw.get("data"), list):
+        items = raw["data"]
+
+    variables: list[dict[str, Any]] = []
+    for item in items:
+        source = item.get("attributes") if isinstance(item, dict) and isinstance(item.get("attributes"), dict) else item
+        if not isinstance(source, dict):
+            continue
+        key = normalize_pearl_text(source.get("env_variable") or source.get("key") or source.get("name"))
+        if not key:
+            continue
+        rules = normalize_pearl_text(source.get("rules"))
+        variables.append(
+            {
+                "key": key,
+                "name": normalize_pearl_text(source.get("name"), key.replace("_", " ").title()),
+                "description": normalize_pearl_text(source.get("description")),
+                "default_value": normalize_pearl_text(
+                    source.get("default_value") if source.get("default_value") is not None else source.get("default")
+                ),
+                "rules": rules,
+                "required": "required" in rules,
+                "user_viewable": bool(source.get("user_viewable", True)),
+                "user_editable": bool(source.get("user_editable", True)),
+            }
+        )
+    return variables
+
+
+def infer_pearl_server_type(name: str, startup: str, variables: list[dict[str, Any]], docker_images: list[dict[str, str]]) -> str:
+    haystack = " ".join(
+        [
+            name.lower(),
+            startup.lower(),
+            " ".join(variable["key"].lower() for variable in variables),
+            " ".join(item["image"].lower() for item in docker_images),
+        ]
+    )
+    if "neoforge" in haystack:
+        return "neoforge"
+    if "forge" in haystack:
+        return "forge"
+    if "fabric" in haystack:
+        return "fabric"
+    if "paper" in haystack or "purpur" in haystack or "spigot" in haystack:
+        return "paper"
+    return "vanilla"
+
+
+def infer_pearl_version(variables: list[dict[str, Any]]) -> str:
+    for key in ("MC_VERSION", "MINECRAFT_VERSION", "SERVER_VERSION"):
+        for variable in variables:
+            if variable["key"] == key and re.fullmatch(r"\d+(?:\.\d+){1,3}", variable["default_value"]):
+                return variable["default_value"]
+    return "1.21.11"
+
+
+def normalize_pearl_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    root = extract_pearl_root(payload)
+    scripts = root.get("scripts") if isinstance(root.get("scripts"), dict) else {}
+    installation = scripts.get("installation") if isinstance(scripts.get("installation"), dict) else {}
+    variables = normalize_pearl_variables(
+        root.get("variables")
+        or (root.get("relationships") or {}).get("variables")
+        or []
+    )
+    docker_images = normalize_pearl_docker_images(root.get("docker_images"))
+    startup = normalize_pearl_text(root.get("startup"))
+    name = normalize_pearl_text(root.get("name"), "Imported Egg")
+    description = normalize_pearl_text(root.get("description"))
+    install_script = normalize_pearl_text(installation.get("script"))
+    install_container = normalize_pearl_text(installation.get("container"))
+    return {
+        "name": name,
+        "description": description,
+        "startup": startup,
+        "docker_images": docker_images,
+        "variables": variables,
+        "install_script": install_script,
+        "install_container": install_container,
+        "inferred_server_type": infer_pearl_server_type(name, startup, variables, docker_images),
+        "suggested_version": infer_pearl_version(variables),
+    }
+
+
+PEARL_PLACEHOLDER_PATTERN = re.compile(r"{{\s*([A-Z0-9_]+)\s*}}")
+
+
+def fill_pearl_placeholders(template: str, values: dict[str, str]) -> str:
+    def replace(match: re.Match[str]) -> str:
+        key = match.group(1)
+        return values.get(key, match.group(0))
+
+    return PEARL_PLACEHOLDER_PATTERN.sub(replace, template)
+
+
+def unresolved_pearl_placeholders(template: str) -> list[str]:
+    return sorted({match.group(1) for match in PEARL_PLACEHOLDER_PATTERN.finditer(template)})
+
+
+def read_pearl_manifest(sid: int, name: str) -> dict[str, Any] | None:
+    path = pearl_manifest_file(sid, name)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        return data if isinstance(data, dict) else None
+    except Exception as exc:
+        logger.warning("Could not read pearl manifest for server %s: %s", sid, exc)
+        return None
+
+
+def write_pearl_manifest(path: str, payload: dict[str, Any]) -> None:
+    with open(os.path.join(path, PEARL_MANIFEST), "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2)
+
+
+def remove_pearl_install_script(path: str) -> None:
+    with contextlib.suppress(OSError):
+        os.remove(pearl_install_script_file(path))
+
+
+def is_pterodactyl_yolk_image(image: str) -> bool:
+    normalized = normalize_pearl_text(image).lower()
+    return "ghcr.io/ptero-eggs/yolks:" in normalized or "quay.io/pterodactyl/core:" in normalized
+
+
+def pearl_library_file(pearl_id: str) -> str:
+    return os.path.join(PEARLS_DIR, f"{pearl_id}.json")
+
+
+def get_bool_panel_setting(db: Session, key: str, default: bool) -> bool:
+    setting = db.query(PanelSetting).filter(PanelSetting.key == key).first()
+    if not setting:
+        setting = PanelSetting(key=key, value="1" if default else "0")
+        db.add(setting)
+        db.commit()
+        db.refresh(setting)
+    return str(setting.value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def get_pearl_feature_flags(db: Session) -> dict[str, bool]:
+    enabled = get_bool_panel_setting(db, PEARLS_ENABLED_KEY, True)
+    admin_only_upload = get_bool_panel_setting(db, PEARLS_ADMIN_ONLY_UPLOAD_KEY, False)
+    return {
+        "enabled": enabled,
+        "admin_only_upload": admin_only_upload,
+    }
+
+
+def ensure_pearls_enabled(db: Session) -> dict[str, bool]:
+    flags = get_pearl_feature_flags(db)
+    if not flags["enabled"]:
+        raise HTTPException(status_code=403, detail="Pterodactyl egg imports are disabled by the panel admin.")
+    return flags
+
+
+def ensure_pearl_upload_allowed(user: User, db: Session) -> dict[str, bool]:
+    flags = ensure_pearls_enabled(db)
+    if flags["admin_only_upload"] and not user.is_admin:
+        raise HTTPException(status_code=403, detail="Only admins can upload Pterodactyl egg JSON files.")
+    return flags
+
+
+def pearl_slug(name: str) -> str:
+    base = sanitize(name).strip("_").lower() or "egg"
+    return f"{base}-{uuid.uuid4().hex[:8]}"
+
+
+def list_library_pearls() -> list[dict[str, Any]]:
+    pearls: list[dict[str, Any]] = []
+    try:
+        for entry in os.listdir(PEARLS_DIR):
+            if not entry.endswith(".json"):
+                continue
+            path = os.path.join(PEARLS_DIR, entry)
+            try:
+                with open(path, "r", encoding="utf-8") as handle:
+                    data = json.load(handle)
+                if not isinstance(data, dict):
+                    continue
+                pearls.append(
+                    {
+                        "id": normalize_pearl_text(data.get("id"), entry[:-5]),
+                        "name": normalize_pearl_text(data.get("name"), "Imported Egg"),
+                        "description": normalize_pearl_text(data.get("description")),
+                        "server_type": normalize_pearl_text(data.get("inferred_server_type"), "paper"),
+                        "suggested_version": normalize_pearl_text(data.get("suggested_version"), "1.21.11"),
+                        "docker_image": normalize_pearl_text((data.get("docker_images") or [{}])[0].get("image") if data.get("docker_images") else ""),
+                        "uploaded_at": normalize_pearl_text(data.get("uploaded_at")),
+                    }
+                )
+            except Exception as exc:
+                logger.warning("Skipping unreadable pearl library item %s: %s", path, exc)
+    except FileNotFoundError:
+        os.makedirs(PEARLS_DIR, exist_ok=True)
+    return sorted(pearls, key=lambda item: (item.get("uploaded_at") or "", item.get("name") or ""), reverse=True)
+
+
+def read_library_pearl(pearl_id: str) -> dict[str, Any]:
+    path = pearl_library_file(pearl_id)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Egg not found.")
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not read saved egg: {exc}")
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=500, detail="Saved egg is invalid.")
+    return data
 
 
 def remove_server_dir(path: str) -> None:
@@ -324,15 +652,21 @@ def ensure_server_properties(sid: int, name: str, port: int, max_players: int, m
             f.write(f"{key}={value}\n")
 
 def to_dict(s: Server) -> dict:
+    pearl_manifest = read_pearl_manifest(s.id, s.name)
     return {
         "id": s.id, "name": s.name, "status": s.status, "server_type": s.server_type,
         "port": s.port, "max_players": s.max_players, "version": s.version, "motd": s.motd,
         "ram_min": s.ram_min, "ram_max": s.ram_max, "swap_mb": s.swap_mb, "cpu_cores": s.cpu_cores,
         "custom_launch_command": s.custom_launch_command,
+        "is_pearl": bool(pearl_manifest),
+        "pearl_name": pearl_manifest.get("name") if pearl_manifest else None,
         "avatar": f"/api/avatars/{s.avatar}" if s.avatar else None,  # type: ignore[union-attr]
         "eula_accepted": has_accepted_eula(s.id, s.name),
         "container_started_at": get_container_started_at(s.id),
         "created_at": s.created_at.isoformat() if s.created_at else None,
+        "public_domain_enabled": s.public_domain_enabled,
+        "public_domain_subdomain": s.public_domain_subdomain,
+        "public_domain": s.public_domain,
         "playit_enabled": s.playit_enabled,
         "playit_domain": s.playit_domain,
         "playit_tunnel_id": s.playit_tunnel_id,
@@ -392,6 +726,136 @@ class Create(BaseModel):
         if self.ram_min > self.ram_max:
             raise ValueError("Minimum RAM cannot be greater than maximum RAM")
         return self
+
+
+class CreatePearl(BaseModel):
+    library_id: Optional[str] = Field(default=None, max_length=160)
+    name: str = Field(min_length=1, max_length=100)
+    pearl_name: str = Field(min_length=1, max_length=120)
+    server_type: str = "paper"
+    port: int = Field(default=25565, ge=MIN_SERVER_PORT, le=MAX_SERVER_PORT)
+    max_players: int = Field(default=20, ge=1, le=1000)
+    version: str = Field(default="1.21.11", min_length=1, max_length=32, pattern=r"^[A-Za-z0-9._+\-]+$")
+    motd: str = Field(default="A Minecraft Server", max_length=255)
+    ram_min: int = Field(default=512, ge=256, le=MAX_RAM_MB)
+    ram_max: int = Field(default=1024, ge=256, le=MAX_RAM_MB)
+    swap_mb: int = Field(default=512, ge=0, le=MAX_SWAP_MB)
+    cpu_cores: int = Field(default=1, ge=1, le=MAX_CPU_CORES)
+    runtime_image: Optional[str] = Field(default=None, max_length=255)
+    startup: str = Field(min_length=1, max_length=4096)
+    install_script: Optional[str] = Field(default=None, max_length=60000)
+    install_container: Optional[str] = Field(default=None, max_length=255)
+    variables: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        value = value.strip()
+        if not sanitize(value).strip("_"):
+            raise ValueError("Server name must contain letters, numbers, hyphens, or underscores")
+        return value
+
+    @field_validator("server_type")
+    @classmethod
+    def validate_server_type(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in ALLOWED_SERVER_TYPES:
+            raise ValueError("Unsupported server type")
+        return normalized
+
+    @field_validator("runtime_image", "install_container")
+    @classmethod
+    def normalize_optional_image(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+    @field_validator("startup")
+    @classmethod
+    def normalize_startup(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Egg startup command is required")
+        return cleaned
+
+    @field_validator("variables")
+    @classmethod
+    def normalize_variables(cls, value: dict[str, str]) -> dict[str, str]:
+        cleaned: dict[str, str] = {}
+        for key, raw in value.items():
+            env_key = normalize_pearl_text(key).upper()
+            if not re.fullmatch(r"[A-Z0-9_]+", env_key):
+                raise ValueError(f"Invalid pearl variable name: {key}")
+            cleaned[env_key] = normalize_pearl_text(raw)
+        return cleaned
+
+    @model_validator(mode="after")
+    def validate_memory(self):
+        if self.ram_min > self.ram_max:
+            raise ValueError("Minimum RAM cannot be greater than maximum RAM")
+        return self
+
+
+async def run_pearl_install_script(
+    server_id: int,
+    path: str,
+    container_image: str,
+    install_script: str,
+    env: dict[str, str],
+) -> tuple[bool, str | None]:
+    helper_name = f"{HELPER_PREFIX}-pearl-install-{server_id}"
+    script_path = pearl_install_script_file(path)
+    try:
+        normalized_script = install_script.replace("\r\n", "\n").replace("\r", "\n").lstrip("\ufeff")
+        if normalized_script.startswith("#!"):
+            script_body = normalized_script
+        else:
+            script_body = "#!/bin/sh\nset -e\n" + normalized_script
+        with open(script_path, "w", encoding="utf-8") as handle:
+            handle.write(script_body)
+            if not script_body.endswith("\n"):
+                handle.write("\n")
+        os.chmod(script_path, 0o755)
+
+        args = [
+            "docker", "run", "--rm",
+            "--name", helper_name,
+            "--label", "enderpanel.helper=true",
+            "--label", f"enderpanel.server_id={server_id}",
+            "--label", "enderpanel.purpose=pearl-install",
+            "--user", runtime_user_spec(),
+            "-v", f"{path}:/mnt/server",
+            "-w", "/mnt/server",
+        ]
+        for key, value in env.items():
+            args.extend(["-e", f"{key}={value}"])
+        args.extend([container_image, f"/mnt/server/{PEARL_INSTALL_SCRIPT}"])
+
+        proc = await asyncio.create_subprocess_exec(
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=600)
+    except asyncio.TimeoutError:
+        with contextlib.suppress(Exception):
+            remove_container_if_exists(helper_name, stop_timeout=1)
+        return False, "Egg install script timed out."
+    except Exception as exc:
+        with contextlib.suppress(Exception):
+            remove_container_if_exists(helper_name, stop_timeout=1)
+        return False, f"Egg install script failed to start: {exc}"
+    finally:
+        remove_pearl_install_script(path)
+        with contextlib.suppress(Exception):
+            remove_container_if_exists(helper_name, stop_timeout=1)
+
+    if proc.returncode != 0:
+        detail = (stderr or stdout).decode("utf-8", errors="replace").strip()
+        return False, detail or f"Egg install script exited with code {proc.returncode}."
+
+    return True, None
 
 async def download_jar(stype: str, ver: str, path: str) -> tuple[bool, str | None]:
     jar = os.path.join(path, "server.jar")
@@ -503,9 +967,18 @@ async def ensure_modded_server_layout(server: Server, path: str) -> tuple[bool, 
         return False, f"Missing {installer_name}. Recreate the server to download the installer again."
 
     proc = None
+    installer_container_name = f"{HELPER_PREFIX}-installer-{server.id}"
     try:
+        with contextlib.suppress(Exception):
+            remove_container_if_exists(installer_container_name, stop_timeout=5)
+        runtime_user = runtime_user_spec()
         proc = await asyncio.create_subprocess_exec(
             "docker", "run", "--rm",
+            "--name", installer_container_name,
+            "--label", "enderpanel.helper=true",
+            "--label", f"enderpanel.server_id={server.id}",
+            "--label", f"enderpanel.purpose={server.server_type}-installer",
+            "--user", runtime_user,
             "-v", f"{path}:/server",
             "-w", "/server",
             image_for_mc(server.version),
@@ -521,9 +994,16 @@ async def ensure_modded_server_layout(server: Server, path: str) -> tuple[bool, 
             with contextlib.suppress(ProcessLookupError):
                 proc.kill()
             await proc.communicate()
+        with contextlib.suppress(Exception):
+            remove_container_if_exists(installer_container_name, stop_timeout=1)
         return False, f"{server.server_type.capitalize()} installer timed out. Please try starting the server again."
     except Exception as exc:
+        with contextlib.suppress(Exception):
+            remove_container_if_exists(installer_container_name, stop_timeout=1)
         return False, f"{server.server_type.capitalize()} installer failed to start: {exc}"
+    finally:
+        with contextlib.suppress(Exception):
+            remove_container_if_exists(installer_container_name, stop_timeout=1)
 
     if proc.returncode != 0:
         detail = (stderr or stdout).decode("utf-8", errors="replace").strip()
@@ -536,6 +1016,254 @@ async def ensure_modded_server_layout(server: Server, path: str) -> tuple[bool, 
         return True, None
 
     return False, f"{server.server_type.capitalize()} installer finished, but no launch files were created."
+
+
+def build_pearl_runtime_values(server: CreatePearl, port: int) -> dict[str, str]:
+    values = {key: normalize_pearl_text(value) for key, value in server.variables.items()}
+    values.setdefault("SERVER_MEMORY", "{ram_max}")
+    values.setdefault("SERVER_MEMORY_MB", "{ram_max}")
+    values.setdefault("SERVER_PORT", "{port}")
+    values.setdefault("SERVER_MAX_PLAYERS", str(server.max_players))
+    values.setdefault("SERVER_JARFILE", "server.jar")
+    return values
+
+
+def build_pearl_install_values(server: CreatePearl, port: int) -> dict[str, str]:
+    values = {key: normalize_pearl_text(value) for key, value in server.variables.items()}
+    values.setdefault("SERVER_MEMORY", str(server.ram_max))
+    values.setdefault("SERVER_MEMORY_MB", str(server.ram_max))
+    values.setdefault("SERVER_PORT", str(port))
+    values.setdefault("SERVER_MAX_PLAYERS", str(server.max_players))
+    values.setdefault("SERVER_JARFILE", "server.jar")
+    values.setdefault("STARTUP", fill_pearl_placeholders(server.startup, build_pearl_runtime_values(server, port)).replace("{ram_max}", str(server.ram_max)).replace("{port}", str(port)))
+    return values
+
+
+@router.post("/pearls/parse")
+async def parse_pearl(file: UploadFile = File(...), user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    ensure_pearl_upload_allowed(user, db)
+    filename = file.filename or "pearl.json"
+    if not filename.lower().endswith(".json"):
+        raise HTTPException(status_code=400, detail="Please upload a JSON egg file.")
+
+    try:
+        payload = json.loads((await file.read()).decode("utf-8"))
+    except Exception:
+        raise HTTPException(status_code=400, detail="That file is not valid JSON.")
+
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Egg JSON must contain an object at the top level.")
+
+    parsed = normalize_pearl_payload(payload)
+    if not parsed["startup"]:
+        raise HTTPException(status_code=400, detail="This egg does not include a startup command.")
+
+    return parsed
+
+
+@router.get("/pearls/config")
+def get_pearl_config(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    flags = get_pearl_feature_flags(db)
+    return {
+        "enabled": flags["enabled"],
+        "admin_only_upload": flags["admin_only_upload"],
+        "can_upload": flags["enabled"] and (user.is_admin or not flags["admin_only_upload"]),
+    }
+
+
+@router.get("/pearls/library")
+def get_pearl_library(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    ensure_pearls_enabled(db)
+    return {"pearls": list_library_pearls()}
+
+
+@router.get("/pearls/library/{pearl_id}")
+def get_pearl_library_item(pearl_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    ensure_pearls_enabled(db)
+    return read_library_pearl(pearl_id)
+
+
+@router.post("/pearls/library")
+async def upload_pearl_library_item(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    ensure_pearl_upload_allowed(user, db)
+    filename = file.filename or "pearl.json"
+    if not filename.lower().endswith(".json"):
+        raise HTTPException(status_code=400, detail="Please upload a JSON egg file.")
+
+    try:
+        payload = json.loads((await file.read()).decode("utf-8"))
+    except Exception:
+        raise HTTPException(status_code=400, detail="That file is not valid JSON.")
+
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Egg JSON must contain an object at the top level.")
+
+    parsed = normalize_pearl_payload(payload)
+    if not parsed["startup"]:
+        raise HTTPException(status_code=400, detail="This egg does not include a startup command.")
+
+    pearl_id = pearl_slug(parsed["name"])
+    stored = {
+        **parsed,
+        "id": pearl_id,
+        "uploaded_at": datetime.utcnow().isoformat(),
+        "uploaded_by": user.username,
+        "source_filename": filename,
+    }
+    with open(pearl_library_file(pearl_id), "w", encoding="utf-8") as handle:
+        json.dump(stored, handle, indent=2)
+    return stored
+
+
+@router.post("/pearls")
+async def create_server_from_pearl(
+    data: CreatePearl,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    flags = ensure_pearls_enabled(db)
+    source_payload: dict[str, Any] | None = None
+    if data.library_id:
+        source_payload = read_library_pearl(data.library_id)
+    if flags["admin_only_upload"] and not user.is_admin and source_payload is None:
+        raise HTTPException(status_code=403, detail="Only admins can upload Pterodactyl egg JSON files. Pick one from the saved egg collection instead.")
+
+    source_name = data.pearl_name
+    source_startup = data.startup
+    source_install_script = data.install_script
+    source_install_container = data.install_container
+    source_runtime_image = data.runtime_image
+    source_server_type = data.server_type
+    source_version = data.version
+    source_variables = dict(data.variables)
+    source_description = ""
+    if source_payload is not None:
+        source_name = normalize_pearl_text(source_payload.get("name"), source_name)
+        source_description = normalize_pearl_text(source_payload.get("description"))
+        source_startup = normalize_pearl_text(source_payload.get("startup"), source_startup)
+        source_install_script = normalize_pearl_text(source_payload.get("install_script")) or source_install_script
+        source_install_container = normalize_pearl_text(source_payload.get("install_container")) or source_install_container
+        source_runtime_image = normalize_pearl_text(
+            (source_payload.get("docker_images") or [{}])[0].get("image") if source_payload.get("docker_images") else None
+        ) or source_runtime_image
+        source_server_type = normalize_pearl_text(source_payload.get("inferred_server_type"), source_server_type)
+        source_version = normalize_pearl_text(source_payload.get("suggested_version"), source_version)
+        library_defaults = {
+            variable["key"]: normalize_pearl_text(variable.get("default_value"))
+            for variable in source_payload.get("variables", [])
+            if isinstance(variable, dict) and variable.get("key")
+        }
+        library_defaults.update(source_variables)
+        source_variables = library_defaults
+
+    port = data.port
+    while db.query(Server).filter(Server.port == port).first():
+        port += 1
+        if port > MAX_SERVER_PORT:
+            raise HTTPException(status_code=400, detail="No available server ports")
+
+    effective_data = data.model_copy(update={
+        "pearl_name": source_name,
+        "startup": source_startup,
+        "install_script": source_install_script,
+        "install_container": source_install_container,
+        "runtime_image": source_runtime_image,
+        "server_type": source_server_type,
+        "version": source_version,
+        "variables": source_variables,
+    })
+
+    runtime_values = build_pearl_runtime_values(effective_data, port)
+    resolved_startup = fill_pearl_placeholders(effective_data.startup, runtime_values)
+    unresolved_startup = unresolved_pearl_placeholders(resolved_startup)
+    if unresolved_startup:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Egg startup is still missing values for: {', '.join(unresolved_startup)}",
+        )
+
+    install_values = build_pearl_install_values(effective_data, port)
+    resolved_install_script = fill_pearl_placeholders(effective_data.install_script or "", install_values).strip()
+    unresolved_install = unresolved_pearl_placeholders(resolved_install_script)
+    if unresolved_install:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Egg install script is still missing values for: {', '.join(unresolved_install)}",
+        )
+
+    server = Server(
+        name=effective_data.name,
+        owner_id=user.id,
+        server_type=effective_data.server_type,
+        port=port,
+        max_players=effective_data.max_players,
+        version=effective_data.version,
+        motd=effective_data.motd,
+        ram_min=effective_data.ram_min,
+        ram_max=effective_data.ram_max,
+        swap_mb=effective_data.swap_mb,
+        cpu_cores=effective_data.cpu_cores,
+        custom_launch_command=resolved_startup,
+        created_at=datetime.utcnow(),
+    )
+    db.add(server)
+    db.commit()
+    db.refresh(server)
+
+    path = sdir(server.id, server.name)
+    remove_server_dir(path)
+    os.makedirs(path, exist_ok=True)
+    with open(os.path.join(path, "eula.txt"), "w", encoding="utf-8") as handle:
+        handle.write("eula=false\n")
+    ensure_server_properties(server.id, server.name, port, effective_data.max_players, effective_data.motd)
+
+    runtime_image = effective_data.runtime_image or image_for_mc(effective_data.version)
+    manifest = {
+        "name": effective_data.pearl_name,
+        "description": source_description,
+        "library_id": effective_data.library_id,
+        "runtime_image": runtime_image,
+        "startup": resolved_startup,
+        "install_container": effective_data.install_container,
+        "variables": effective_data.variables,
+        "imported_at": datetime.utcnow().isoformat(),
+    }
+    write_pearl_manifest(path, manifest)
+
+    install_ran = False
+    install_error = None
+    if resolved_install_script:
+        install_ran = True
+        install_container = effective_data.install_container or runtime_image
+        ok, install_error = await run_pearl_install_script(
+            server.id,
+            path,
+            install_container,
+            resolved_install_script,
+            install_values,
+        )
+        if not ok:
+            response = to_dict(server)
+            response["install_ran"] = True
+            response["install_error"] = install_error
+            response["pearl_name"] = data.pearl_name
+            if port != data.port:
+                response["port_changed"] = True
+                response["original_port"] = data.port
+            return response
+
+    response = to_dict(server)
+    response["install_ran"] = install_ran
+    response["install_error"] = install_error
+    response["pearl_name"] = effective_data.pearl_name
+    if port != data.port:
+        response["port_changed"] = True
+        response["original_port"] = data.port
+    return response
 
 @router.get("/versions/{server_type}")
 async def get_versions(server_type: str):
@@ -681,6 +1409,7 @@ async def start_server(
     
     d = sdir(sid, s.name)
     ensure_server_properties(sid, s.name, s.port, s.max_players, s.motd)
+    pearl_manifest = read_pearl_manifest(sid, s.name)
 
     if not has_accepted_eula(sid, s.name):
         if data and data.accept_eula:
@@ -688,37 +1417,76 @@ async def start_server(
         else:
             raise HTTPException(400, "EULA acceptance required")
 
-    ok, install_error = await ensure_modded_server_layout(s, d)
-    if not ok:
-        raise HTTPException(status_code=400, detail=install_error or "Failed to prepare server files")
-
-    ensure_runtime_images(client)
-    
     java = java_cmd(s.version)
-    if s.custom_launch_command:
-        cmd = s.custom_launch_command.replace("{jar}", "server.jar").replace("{ram_min}", str(s.ram_min))
-        cmd = shlex.split(cmd.replace("{ram_max}", str(s.ram_max)).replace("{java}", java))
-    else:
-        unix_args = find_unix_args(d)
-
-        server_jar = os.path.join(d, "server.jar")
-        has_server_jar = (
-            os.path.exists(server_jar)
-            and os.path.isfile(server_jar)
-            and os.access(server_jar, os.R_OK)
-            and os.path.getsize(server_jar) > 50000
+    runtime_image = image_for_mc(s.version)
+    startup_command_text: str | None = None
+    if pearl_manifest and pearl_manifest.get("runtime_image") and (pearl_manifest.get("startup") or s.custom_launch_command):
+        cmd_string = normalize_pearl_text(pearl_manifest.get("startup") or s.custom_launch_command)
+        cmd_string = (
+            cmd_string
+            .replace("{jar}", "server.jar")
+            .replace("{ram_min}", str(s.ram_min))
+            .replace("{ram_max}", str(s.ram_max))
+            .replace("{java}", java)
+            .replace("{port}", str(s.port))
+            .replace("{max_players}", str(s.max_players))
         )
+        startup_command_text = cmd_string
+        cmd = shlex.split(cmd_string)
+        runtime_image = normalize_pearl_text(pearl_manifest.get("runtime_image"), runtime_image)
+    else:
+        ok, install_error = await ensure_modded_server_layout(s, d)
+        if not ok:
+            raise HTTPException(status_code=400, detail=install_error or "Failed to prepare server files")
 
-        if unix_args:
-            with open(os.path.join(d, "user_jvm_args.txt"), "w") as f:
-                f.write(f"-Xmx{s.ram_max}M\n-Xms{s.ram_min}M\n-XX:+UseG1GC\n")
-            ua_rel = container_relative_path(unix_args, d)
-            # Forge/NeoForge installers generate unix_args.txt with the correct launch entrypoint.
-            cmd = [java, "@user_jvm_args.txt", f"@{ua_rel}", "nogui"]
-        elif has_server_jar:
-            cmd = [java, f"-Xmx{s.ram_max}M", f"-Xms{s.ram_min}M", "-jar", "server.jar", "nogui"]
+        ensure_runtime_images(client)
+
+        if s.custom_launch_command:
+            cmd = s.custom_launch_command.replace("{jar}", "server.jar").replace("{ram_min}", str(s.ram_min))
+            cmd = shlex.split(
+                cmd
+                .replace("{ram_max}", str(s.ram_max))
+                .replace("{java}", java)
+                .replace("{port}", str(s.port))
+                .replace("{max_players}", str(s.max_players))
+            )
         else:
-            raise HTTPException(400, "No server files found")
+            unix_args = find_unix_args(d)
+
+            server_jar = os.path.join(d, "server.jar")
+            has_server_jar = (
+                os.path.exists(server_jar)
+                and os.path.isfile(server_jar)
+                and os.access(server_jar, os.R_OK)
+                and os.path.getsize(server_jar) > 50000
+            )
+
+            if unix_args:
+                with open(os.path.join(d, "user_jvm_args.txt"), "w") as f:
+                    f.write(
+                        "\n".join([
+                            f"-Xmx{s.ram_max}M",
+                            f"-Xms{s.ram_min}M",
+                            "-XX:+UseG1GC",
+                            *terminal_jvm_args(),
+                            "",
+                        ])
+                    )
+                ua_rel = container_relative_path(unix_args, d)
+                # Forge/NeoForge installers generate unix_args.txt with the correct launch entrypoint.
+                cmd = [java, "@user_jvm_args.txt", f"@{ua_rel}", "nogui"]
+            elif has_server_jar:
+                cmd = [
+                    java,
+                    f"-Xmx{s.ram_max}M",
+                    f"-Xms{s.ram_min}M",
+                    *terminal_jvm_args(),
+                    "-jar",
+                    "server.jar",
+                    "nogui",
+                ]
+            else:
+                raise HTTPException(400, "No server files found")
 
     # Always clean up any leftover container before creating
     try:
@@ -727,21 +1495,36 @@ async def start_server(
         pass
 
     try:
+        runtime_user = runtime_user_spec()
+        is_yolk_runtime = bool(pearl_manifest and is_pterodactyl_yolk_image(runtime_image))
+        container_mount_path = "/home/container" if is_yolk_runtime else "/server"
+        runtime_env = {"EULA": "TRUE", "HOME": container_mount_path}
+        if pearl_manifest and isinstance(pearl_manifest.get("variables"), dict):
+            for key, value in pearl_manifest["variables"].items():
+                runtime_env[str(key)] = normalize_pearl_text(value)
+        runtime_env.setdefault("SERVER_MEMORY", str(s.ram_max))
+        runtime_env.setdefault("SERVER_PORT", str(s.port))
+        runtime_env.setdefault("SERVER_MAX_PLAYERS", str(s.max_players))
+        if is_yolk_runtime and startup_command_text:
+            runtime_env["STARTUP"] = startup_command_text
+            runtime_env.setdefault("P_SERVER_LOCATION", "none")
+            runtime_env.setdefault("TZ", "UTC")
         client.containers.run(
-            image_for_mc(s.version),
-            command=cmd,
+            runtime_image,
+            command=None if is_yolk_runtime else cmd,
             name=name,
             detach=True,
             tty=True,
             stdin_open=True,
-            volumes={d: {"bind": "/server", "mode": "rw"}},
+            volumes={d: {"bind": container_mount_path, "mode": "rw"}},
             ports={"25565/tcp": s.port, "25575/tcp": 25575 + s.id},
             mem_limit=f"{s.ram_max}m",
             memswap_limit=f"{s.ram_max + s.swap_mb}m",
             cpu_period=100000,
             cpu_quota=int(s.cpu_cores * 100000),
-            working_dir="/server",
-            environment={"EULA": "TRUE"}
+            working_dir=container_mount_path,
+            environment=runtime_env,
+            user=runtime_user,
         )
     except Exception as exc:
         raise HTTPException(
@@ -752,16 +1535,19 @@ async def start_server(
     s.status = "running"
     db.commit()
 
-    if s.playit_enabled and user.playit_agent_secret:
+    if s.playit_enabled:
         try:
-            start_playit_container(s.id, user.playit_agent_secret)
-            tunnel_id, domain, detail = ensure_playit_tunnel(s, user)
-            if tunnel_id:
-                s.playit_tunnel_id = tunnel_id
-                s.playit_domain = domain
-                db.commit()
-            elif detail:
-                logger.warning("Failed to auto-create Playit tunnel for server %s on start: %s", s.id, detail)
+            secret = read_playit_secret_from_disk(s)
+            if secret:
+                start_playit_container(s)
+            if secret:
+                tunnel_id, domain, detail = ensure_playit_tunnel(s, secret)
+                if tunnel_id:
+                    s.playit_tunnel_id = tunnel_id
+                    s.playit_domain = domain
+                    db.commit()
+                elif detail:
+                    logger.warning("Failed to auto-create Playit tunnel for server %s on start: %s", s.id, detail)
         except Exception as exc:
             logger.warning("Failed to start local Playit agent for server %s: %s", s.id, exc)
 
@@ -810,21 +1596,13 @@ async def delete_server(sid: int, db: Session = Depends(get_db), user: User = De
     s = db.query(Server).filter(Server.id == sid, Server.owner_id == user.id).first()
     if not s: raise HTTPException(404, "Not found")
 
+    await delete_public_domain_record(db, s)
     cleanup_server_runtime_artifacts(sid)
     d = sdir(sid, s.name)
     remove_server_dir(d)
 
     db.delete(s)
     db.commit()
-
-    remaining_playit_servers = db.query(Server).filter(
-        Server.owner_id == user.id,
-        Server.playit_enabled == True,  # noqa: E712
-    ).count()
-    if remaining_playit_servers == 0:
-        user.playit_agent_id = None
-        user.playit_agent_secret = None
-        db.commit()
 
     return {"status": "deleted"}
 

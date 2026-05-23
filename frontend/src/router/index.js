@@ -36,6 +36,8 @@ router.beforeEach(async (to, from, next) => {
     next('/login')
   } else if (to.meta.requiresAdmin && !authStore.user?.is_admin) {
     next('/dashboard')
+  } else if (to.path === '/welcome' && authStore.hasCompletedWelcome()) {
+    next('/dashboard')
   } else {
     next()
   }

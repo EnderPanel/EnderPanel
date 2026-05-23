@@ -88,11 +88,11 @@
       <!-- CPU Percent Card -->
       <div class="glass-panel p-6 flex flex-col justify-between hover-card relative overflow-hidden dqs-stat-card">
         <div class="absolute bottom-0 inset-x-0 h-1 bg-gray-200 dark:bg-white/5">
-          <div class="h-full bg-gradient-to-r from-red-500 to-orange-400 transition-all duration-500" :style="{width: (stats.system?.cpu_percent || 0) + '%'}"></div>
+          <div class="h-full transition-all duration-500" :class="isDqsTheme ? 'bg-gradient-to-r from-[#0f2748] via-[#174d88] to-[#38bdf8]' : 'bg-gradient-to-r from-red-500 to-orange-400'" :style="{width: (stats.system?.cpu_percent || 0) + '%'}"></div>
         </div>
         <div class="flex items-center justify-between mb-2">
           <p class="text-sm font-medium text-gray-500 dark:text-gray-400">CPU Usage</p>
-          <svg class="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+          <svg class="w-6 h-6" :class="isDqsTheme ? 'text-sky-300' : 'text-red-400'" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
         </div>
         <p class="text-4xl font-black mb-2">{{ stats.system?.cpu_percent || 0 }}<span class="text-2xl text-gray-500 font-medium">%</span></p>
       </div>
@@ -105,32 +105,62 @@
       <div class="glass-panel p-6 hover-card flex flex-col">
         <div class="flex justify-between items-center mb-6">
           <div class="flex items-center gap-3">
-             <div class="w-3 h-3 rounded-full bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.7)]"></div>
+             <div class="w-3 h-3 rounded-full" :class="isDqsTheme ? 'bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.7)]' : 'bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.7)]'"></div>
              <h3 class="font-bold text-lg">CPU History</h3>
           </div>
-          <span class="text-sm font-medium bg-purple-500/10 text-purple-400 px-3 py-1 rounded-full border border-purple-500/20">
+          <span class="text-sm font-medium px-3 py-1 rounded-full border" :class="isDqsTheme ? 'bg-sky-500/10 text-sky-300 border-sky-400/20' : 'bg-purple-500/10 text-purple-400 border-purple-500/20'">
             {{ stats.system?.cpu_percent || 0 }}% Load
           </span>
         </div>
         <div class="flex-1 w-full relative">
           <canvas ref="cpuCanvas" class="w-full h-[180px] rounded-lg"></canvas>
         </div>
+        <div class="grid grid-cols-3 gap-3 mt-5">
+          <div class="rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 px-4 py-3">
+            <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Current</p>
+            <p class="text-lg font-bold mt-1">{{ formatPercent(cpuSummary.current) }}</p>
+          </div>
+          <div class="rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 px-4 py-3">
+            <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Average</p>
+            <p class="text-lg font-bold mt-1">{{ formatPercent(cpuSummary.average) }}</p>
+          </div>
+          <div class="rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 px-4 py-3">
+            <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Peak</p>
+            <p class="text-lg font-bold mt-1">{{ formatPercent(cpuSummary.peak) }}</p>
+          </div>
+        </div>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mt-3">{{ historyTimeRangeLabel }}</p>
       </div>
 
       <!-- Memory Graph -->
       <div class="glass-panel p-6 hover-card flex flex-col">
         <div class="flex justify-between items-center mb-6">
           <div class="flex items-center gap-3">
-             <div class="w-3 h-3 rounded-full bg-pink-500 shadow-[0_0_10px_rgba(236,72,153,0.7)]"></div>
+             <div class="w-3 h-3 rounded-full" :class="isDqsTheme ? 'bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.7)]' : 'bg-pink-500 shadow-[0_0_10px_rgba(236,72,153,0.7)]'"></div>
              <h3 class="font-bold text-lg">Memory History</h3>
           </div>
-          <span class="text-sm font-medium bg-pink-500/10 text-pink-400 px-3 py-1 rounded-full border border-pink-500/20">
+          <span class="text-sm font-medium px-3 py-1 rounded-full border" :class="isDqsTheme ? 'bg-cyan-500/10 text-cyan-300 border-cyan-400/20' : 'bg-pink-500/10 text-pink-400 border-pink-500/20'">
             {{ stats.system?.memory_percent || 0 }}% Load
           </span>
         </div>
         <div class="flex-1 w-full relative">
           <canvas ref="memCanvas" class="w-full h-[180px] rounded-lg"></canvas>
         </div>
+        <div class="grid grid-cols-3 gap-3 mt-5">
+          <div class="rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 px-4 py-3">
+            <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Current</p>
+            <p class="text-lg font-bold mt-1">{{ formatPercent(memorySummary.current) }}</p>
+          </div>
+          <div class="rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 px-4 py-3">
+            <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Average</p>
+            <p class="text-lg font-bold mt-1">{{ formatPercent(memorySummary.average) }}</p>
+          </div>
+          <div class="rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 px-4 py-3">
+            <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Peak</p>
+            <p class="text-lg font-bold mt-1">{{ formatPercent(memorySummary.peak) }}</p>
+          </div>
+        </div>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mt-3">{{ historyTimeRangeLabel }}</p>
       </div>
     </div>
 
@@ -146,7 +176,7 @@
           <span class="text-sm font-bold">{{ formatBytes(stats.system?.memory_used) }} / {{ formatBytes(stats.system?.memory_total) }}</span>
         </div>
         <div class="h-3 w-full bg-gray-200 dark:bg-black/40 rounded-full overflow-hidden border border-white/5 shadow-inner">
-          <div class="h-full bg-gradient-to-r from-pink-500 to-rose-400 rounded-full transition-all duration-1000 ease-out" 
+          <div class="h-full rounded-full transition-all duration-1000 ease-out" :class="isDqsTheme ? 'bg-gradient-to-r from-[#0b1c38] via-[#123d72] to-[#38bdf8]' : 'bg-gradient-to-r from-pink-500 to-rose-400'"
                :style="{width: (stats.system?.memory_percent || 0) + '%'}"></div>
         </div>
       </div>
@@ -182,6 +212,68 @@
           </div>
           <span class="text-xl font-bold truncate">{{ formatBytes(stats.system?.net_recv) }}</span>
         </div>
+      </div>
+    </div>
+
+    <div class="glass-panel p-6 hover-card mb-8">
+      <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
+        <div>
+          <h3 class="font-bold text-lg flex items-center gap-2">
+            <svg class="w-5 h-5 text-mc-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 3h7l5 5v13a1 1 0 01-1 1H7a2 2 0 01-2-2V5a2 2 0 012-2z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 3v5h5"></path></svg>
+            File Upload Limit
+          </h3>
+          <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Change the maximum allowed upload size for the panel file manager.</p>
+        </div>
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 lg:min-w-[340px]">
+          <label class="flex-1">
+            <span class="block text-sm text-gray-500 dark:text-gray-400 mb-2">Limit in MB</span>
+            <input v-model.number="panelSettings.upload_limit_mb" type="number" min="1" max="2048" class="input-field w-full" :class="isDqsTheme ? 'border-sky-900/60 bg-slate-950/70 text-sky-100 placeholder:text-sky-300/40 focus:border-sky-500 focus:ring-sky-500/20' : ''" />
+          </label>
+          <button @click="saveUploadLimit" :disabled="savingUploadLimit" class="px-5 py-3 rounded-xl font-bold text-white hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:scale-100" :class="isDqsTheme ? 'bg-gradient-to-r from-[#0f2748] via-[#174d88] to-[#2563eb] shadow-lg shadow-sky-950/30' : 'bg-gradient-to-r from-mc-accent to-mc-purple'">
+            {{ savingUploadLimit ? 'Saving...' : 'Save Limit' }}
+          </button>
+        </div>
+      </div>
+      <div class="mt-4 flex flex-wrap items-center gap-3 text-sm">
+        <span class="px-3 py-1 rounded-full bg-black/10 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300">
+          Current: {{ panelSettings.upload_limit_mb || 100 }} MB
+        </span>
+        <span class="text-gray-500 dark:text-gray-400">
+          Bigger files than this will be rejected in the file manager upload modal.
+        </span>
+      </div>
+    </div>
+
+    <div class="glass-panel p-6 hover-card mb-8">
+      <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
+        <div>
+          <h3 class="font-bold text-lg flex items-center gap-2">
+            <svg class="w-5 h-5 text-mc-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h10M7 12h10m-10 5h6M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"></path></svg>
+            Egg Controls
+          </h3>
+          <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Control whether Pterodactyl egg imports are available panel-wide and whether only admins can upload egg JSON files.</p>
+        </div>
+        <button @click="savePearlSettings" :disabled="savingPearlSettings" class="px-5 py-3 rounded-xl font-bold text-white hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:scale-100" :class="isDqsTheme ? 'bg-gradient-to-r from-[#0f2748] via-[#174d88] to-[#2563eb] shadow-lg shadow-sky-950/30' : 'bg-gradient-to-r from-mc-accent to-mc-purple'">
+          {{ savingPearlSettings ? 'Saving...' : 'Save Egg Settings' }}
+        </button>
+      </div>
+
+      <div class="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <label class="rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 px-4 py-4 flex items-start gap-4 cursor-pointer">
+          <input v-model="panelSettings.pearls_enabled" type="checkbox" class="mt-1 h-5 w-5 rounded border-gray-300 text-mc-accent focus:ring-mc-accent" />
+          <div>
+            <p class="font-semibold text-gray-900 dark:text-white">Enable Pterodactyl Eggs</p>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Show the eggs tab in server creation and allow the saved egg library to be used.</p>
+          </div>
+        </label>
+
+        <label class="rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 px-4 py-4 flex items-start gap-4 cursor-pointer">
+          <input v-model="panelSettings.pearls_admin_only_upload" type="checkbox" class="mt-1 h-5 w-5 rounded border-gray-300 text-mc-accent focus:ring-mc-accent" :disabled="!panelSettings.pearls_enabled" />
+          <div>
+            <p class="font-semibold text-gray-900 dark:text-white">Only Admins can upload Eggs</p>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Regular users will only see the saved egg collection and won’t be allowed to upload new JSON files.</p>
+          </div>
+        </label>
       </div>
     </div>
 
@@ -244,7 +336,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, inject, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, inject, nextTick, watchEffect } from 'vue'
 import axios from 'axios'
 
 const toast = inject('toast')
@@ -252,12 +344,55 @@ const toast = inject('toast')
 const stats = ref({})
 const updateInfo = ref({})
 const updating = ref(false)
+const panelSettings = ref({
+  upload_limit_mb: 100,
+  min_upload_limit_mb: 1,
+  max_upload_limit_mb: 2048,
+  pearls_enabled: true,
+  pearls_admin_only_upload: false,
+})
+const savingUploadLimit = ref(false)
+const savingPearlSettings = ref(false)
+const isDqsTheme = ref(false)
 const dockerAvailable = computed(() => stats.value.docker?.available !== false)
 const cpuCanvas = ref(null)
 const memCanvas = ref(null)
 let interval
+const cpuSummary = computed(() => summarizeSeries(stats.value.history?.cpu || [], stats.value.system?.cpu_percent))
+const memorySummary = computed(() => summarizeSeries(stats.value.history?.memory || [], stats.value.system?.memory_percent))
+const historyTimeRangeLabel = computed(() => {
+  const timestamps = stats.value.history?.timestamps || []
+  if (!Array.isArray(timestamps) || timestamps.length < 2) return 'Waiting for more history points.'
+  const start = new Date(timestamps[0] * 1000)
+  const end = new Date(timestamps[timestamps.length - 1] * 1000)
+  return `Range: ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} to ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+})
+const cpuGraphColor = computed(() => (isDqsTheme.value ? '#38BDF8' : '#A855F7'))
+const memoryGraphColor = computed(() => (isDqsTheme.value ? '#22D3EE' : '#EC4899'))
 
-function drawBezierGraph(canvas, data, hexColor) {
+function syncAdminThemeState() {
+  if (typeof document === 'undefined') return
+  isDqsTheme.value =
+    document.documentElement.classList.contains('theme-dqs') ||
+    localStorage.getItem('theme') === 'dqs-hosting'
+}
+
+function summarizeSeries(series, currentOverride = null) {
+  const values = Array.isArray(series) ? series.filter((value) => Number.isFinite(Number(value))).map(Number) : []
+  if (!values.length) {
+    const current = Number.isFinite(Number(currentOverride)) ? Number(currentOverride) : 0
+    return { current, average: current, peak: current }
+  }
+  const total = values.reduce((sum, value) => sum + value, 0)
+  const current = Number.isFinite(Number(currentOverride)) ? Number(currentOverride) : (values[values.length - 1] || 0)
+  return {
+    current,
+    average: total / values.length,
+    peak: Math.max(...values, current),
+  }
+}
+
+function drawBezierGraph(canvas, data, timestamps, hexColor) {
   if (!canvas || !data || data.length < 2) return
   const ctx = canvas.getContext('2d')
   
@@ -271,22 +406,41 @@ function drawBezierGraph(canvas, data, hexColor) {
   const w = rect.width
   const h = rect.height
   ctx.clearRect(0, 0, w, h)
+  const padding = { top: 16, right: 12, bottom: 28, left: 38 }
+  const plotW = Math.max(10, w - padding.left - padding.right)
+  const plotH = Math.max(10, h - padding.top - padding.bottom)
+  const maxValue = Math.max(100, ...data.map((value) => Number(value) || 0))
+  const gridSteps = 4
 
-  // Subtle grid lines
-  ctx.strokeStyle = 'rgba(255,255,255,0.03)'
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.14)'
+  ctx.fillStyle = 'rgba(148, 163, 184, 0.85)'
   ctx.lineWidth = 1
-  for (let i = 0; i <= 4; i++) {
-    const y = (h / 4) * i
+  ctx.font = '11px system-ui, -apple-system, sans-serif'
+
+  for (let i = 0; i <= gridSteps; i++) {
+    const y = padding.top + (plotH / gridSteps) * i
     ctx.beginPath()
-    ctx.moveTo(0, y)
-    ctx.lineTo(w, y)
+    ctx.moveTo(padding.left, y)
+    ctx.lineTo(w - padding.right, y)
+    ctx.stroke()
+
+    const labelValue = Math.round(maxValue - (maxValue / gridSteps) * i)
+    ctx.fillText(`${labelValue}%`, 4, y + 4)
+  }
+
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.10)'
+  for (let i = 0; i <= 3; i++) {
+    const x = padding.left + (plotW / 3) * i
+    ctx.beginPath()
+    ctx.moveTo(x, padding.top)
+    ctx.lineTo(x, h - padding.bottom)
     ctx.stroke()
   }
 
-  const step = w / (data.length - 1)
+  const step = plotW / (data.length - 1)
   const points = data.map((v, i) => ({
-    x: i * step,
-    y: h - (v / 100) * h * 0.9 - (h * 0.05) // Leave 5% padding top and bottom
+    x: padding.left + i * step,
+    y: padding.top + plotH - ((Number(v) || 0) / maxValue) * plotH,
   }))
 
   ctx.beginPath()
@@ -315,8 +469,8 @@ function drawBezierGraph(canvas, data, hexColor) {
   ctx.shadowBlur = 0
   
   // Fill gradient
-  ctx.lineTo(w, h)
-  ctx.lineTo(0, h)
+  ctx.lineTo(padding.left + plotW, padding.top + plotH)
+  ctx.lineTo(padding.left, padding.top + plotH)
   ctx.closePath()
 
   const [_, r, g, b] = hexColor.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i) || [0, 168, 85, 247]
@@ -328,17 +482,45 @@ function drawBezierGraph(canvas, data, hexColor) {
   
   ctx.fillStyle = grad
   ctx.fill()
+
+  const lastPoint = points[points.length - 1]
+  ctx.beginPath()
+  ctx.arc(lastPoint.x, lastPoint.y, 4, 0, Math.PI * 2)
+  ctx.fillStyle = '#ffffff'
+  ctx.fill()
+  ctx.beginPath()
+  ctx.arc(lastPoint.x, lastPoint.y, 2.5, 0, Math.PI * 2)
+  ctx.fillStyle = hexColor
+  ctx.fill()
+
+  const timeLabels = Array.isArray(timestamps) ? timestamps : []
+  if (timeLabels.length >= 2) {
+    const first = new Date(timeLabels[0] * 1000)
+    const middle = new Date(timeLabels[Math.floor(timeLabels.length / 2)] * 1000)
+    const last = new Date(timeLabels[timeLabels.length - 1] * 1000)
+    const labels = [
+      { x: padding.left, text: first.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), align: 'left' },
+      { x: padding.left + plotW / 2, text: middle.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), align: 'center' },
+      { x: padding.left + plotW, text: last.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), align: 'right' },
+    ]
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.85)'
+    labels.forEach((label) => {
+      ctx.textAlign = label.align
+      ctx.fillText(label.text, label.x, h - 8)
+    })
+    ctx.textAlign = 'left'
+  }
 }
 
 async function fetchStats() {
   try {
+    syncAdminThemeState()
     const res = await axios.get('/api/admin/stats')
     stats.value = res.data
     await nextTick()
     if (res.data.history) {
-      // #A855F7 is purple, #EC4899 is pink
-      drawBezierGraph(cpuCanvas.value, res.data.history.cpu, '#A855F7')
-      drawBezierGraph(memCanvas.value, res.data.history.memory, '#EC4899')
+      drawBezierGraph(cpuCanvas.value, res.data.history.cpu, res.data.history.timestamps, cpuGraphColor.value)
+      drawBezierGraph(memCanvas.value, res.data.history.memory, res.data.history.timestamps, memoryGraphColor.value)
     }
   } catch (e) {
     console.warn("Failed to fetch admin stats")
@@ -350,6 +532,58 @@ async function checkUpdate() {
     const res = await axios.get('/api/update/check')
     updateInfo.value = res.data
   } catch (e) {}
+}
+
+async function fetchPanelSettings() {
+  try {
+    const res = await axios.get('/api/admin/panel-settings')
+    panelSettings.value = {
+      ...panelSettings.value,
+      ...res.data,
+    }
+  } catch (e) {
+    console.warn('Failed to fetch panel settings')
+  }
+}
+
+async function saveUploadLimit() {
+  const nextValue = Number(panelSettings.value.upload_limit_mb)
+  const min = Number(panelSettings.value.min_upload_limit_mb || 1)
+  const max = Number(panelSettings.value.max_upload_limit_mb || 2048)
+  if (!Number.isFinite(nextValue) || nextValue < min || nextValue > max) {
+    toast?.({ title: 'Invalid limit', message: `Choose a value between ${min}MB and ${max}MB.`, type: 'error' })
+    return
+  }
+
+  savingUploadLimit.value = true
+  try {
+    const res = await axios.put('/api/admin/panel-settings/upload-limit', {
+      upload_limit_mb: nextValue,
+    })
+    panelSettings.value.upload_limit_mb = res.data.upload_limit_mb
+    toast?.({ title: 'Saved', message: `Upload limit set to ${res.data.upload_limit_mb}MB.`, type: 'success' })
+  } catch (e) {
+    toast?.({ title: 'Save failed', message: e.response?.data?.detail || 'Could not save upload limit.', type: 'error' })
+  } finally {
+    savingUploadLimit.value = false
+  }
+}
+
+async function savePearlSettings() {
+  savingPearlSettings.value = true
+  try {
+    const res = await axios.put('/api/admin/panel-settings/pearls', {
+      pearls_enabled: !!panelSettings.value.pearls_enabled,
+      pearls_admin_only_upload: !!panelSettings.value.pearls_admin_only_upload,
+    })
+    panelSettings.value.pearls_enabled = res.data.pearls_enabled
+    panelSettings.value.pearls_admin_only_upload = res.data.pearls_admin_only_upload
+    toast?.({ title: 'Saved', message: 'Egg feature settings updated.', type: 'success' })
+  } catch (e) {
+    toast?.({ title: 'Save failed', message: e.response?.data?.detail || 'Could not save egg settings.', type: 'error' })
+  } finally {
+    savingPearlSettings.value = false
+  }
 }
 
 async function installUpdate() {
@@ -377,6 +611,12 @@ function formatBytes(bytes) {
   return size.toFixed(2) + ' ' + units[i]
 }
 
+function formatPercent(value) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return '0%'
+  return `${numeric.toFixed(1)}%`
+}
+
 function formatUptime(seconds) {
   if (seconds === undefined) return "Unknown"
   const d = Math.floor(seconds / (3600*24))
@@ -396,17 +636,27 @@ function statusClass(status) {
 let resizeHandler
 
 onMounted(() => {
+  syncAdminThemeState()
   fetchStats()
   checkUpdate()
+  fetchPanelSettings()
   interval = setInterval(fetchStats, 5000)
 
   resizeHandler = () => {
+    syncAdminThemeState()
     if (stats.value.history) {
-      drawBezierGraph(cpuCanvas.value, stats.value.history.cpu, '#A855F7')
-      drawBezierGraph(memCanvas.value, stats.value.history.memory, '#EC4899')
+      drawBezierGraph(cpuCanvas.value, stats.value.history.cpu, stats.value.history.timestamps, cpuGraphColor.value)
+      drawBezierGraph(memCanvas.value, stats.value.history.memory, stats.value.history.timestamps, memoryGraphColor.value)
     }
   }
   window.addEventListener('resize', resizeHandler)
+})
+
+watchEffect(() => {
+  if (stats.value.history && cpuCanvas.value && memCanvas.value) {
+    drawBezierGraph(cpuCanvas.value, stats.value.history.cpu, stats.value.history.timestamps, cpuGraphColor.value)
+    drawBezierGraph(memCanvas.value, stats.value.history.memory, stats.value.history.timestamps, memoryGraphColor.value)
+  }
 })
 
 onUnmounted(() => {

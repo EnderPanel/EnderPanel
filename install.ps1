@@ -227,7 +227,11 @@ try {
     # Preserve existing data on upgrade
     if (Test-Path $InstallDir) {
         Write-Host "Existing installation found. Upgrading..." -ForegroundColor Yellow
-        if (Test-Path "$InstallDir\backend\mcpanel.db") { Copy-Item "$InstallDir\backend\mcpanel.db" "$TmpDir\backend\" -Force }
+        if (Test-Path "$InstallDir\backend\enderpanel.db") {
+            Copy-Item "$InstallDir\backend\enderpanel.db" "$TmpDir\backend\" -Force
+        } elseif (Test-Path "$InstallDir\backend\mcpanel.db") {
+            Copy-Item "$InstallDir\backend\mcpanel.db" "$TmpDir\backend\enderpanel.db" -Force
+        }
         if (Test-Path "$InstallDir\backend\servers") { Copy-Item "$InstallDir\backend\servers" "$TmpDir\backend\" -Recurse -Force }
         if (Test-Path "$InstallDir\backend\avatars") { Copy-Item "$InstallDir\backend\avatars" "$TmpDir\backend\" -Recurse -Force }
         if (Test-Path "$InstallDir\backend\data") { Copy-Item "$InstallDir\backend\data" "$TmpDir\backend\" -Recurse -Force }

@@ -116,8 +116,10 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
+import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
 const step = ref(0)
 const avatarInput = ref(null)
 const avatarPreview = ref(null)
@@ -140,12 +142,21 @@ async function finish() {
       
       const res = await axios.get('/api/auth/me')
       localStorage.setItem('user', JSON.stringify(res.data))
+      authStore.user = res.data
     } catch (e) {
       console.error('Failed to upload avatar:', e)
     }
   }
 
   localStorage.setItem('welcome_shown', 'true')
+  if (authStore.user?.username) {
+    localStorage.setItem(`welcome_shown_${authStore.user.username}`, 'true')
+  }
+  try {
+    await authStore.updatePreferences({ welcome_completed: true })
+  } catch (e) {
+    console.error('Failed to save welcome completion:', e)
+  }
   router.push('/dashboard')
 }
 </script>

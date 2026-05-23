@@ -14,12 +14,20 @@ router = APIRouter(prefix="/api/servers/{server_id}/settings", tags=["settings"]
 def sanitize_name(name: str) -> str:
     return re.sub(r'[^a-zA-Z0-9_-]', '_', name)
 
+
 def get_server_dir(server_id: int, server_name: str = None):
+    exact_path = None
     if server_name:
-        return os.path.join(SERVERS_DIR, f"{server_id}-{sanitize_name(server_name)}")
-    for folder in os.listdir(SERVERS_DIR):
+        exact_path = os.path.join(SERVERS_DIR, f"{server_id}-{sanitize_name(server_name)}")
+        if os.path.exists(exact_path):
+            return exact_path
+
+    for folder in sorted(os.listdir(SERVERS_DIR)):
         if folder.startswith(f"{server_id}-"):
             return os.path.join(SERVERS_DIR, folder)
+
+    if exact_path:
+        return exact_path
     return os.path.join(SERVERS_DIR, str(server_id))
 
 @router.get("/")

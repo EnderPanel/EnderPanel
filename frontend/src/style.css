@@ -3,6 +3,13 @@
 @tailwind utilities;
 
 @layer base {
+  html,
+  body,
+  #app {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
   * {
     scrollbar-width: thin;
     scrollbar-color: rgba(74, 158, 255, 0.2) transparent;
@@ -342,6 +349,8 @@
 .theme-dqs .dqs-page-shell {
   width: 100%;
   max-width: none !important;
+  min-width: 0;
+  box-sizing: border-box;
   padding: 20px 24px 28px !important;
 }
 
@@ -515,6 +524,43 @@
   border-color: var(--dqs-border) !important;
 }
 
+.enderpanel-auth-page {
+  color: #f9fafb;
+}
+
+.enderpanel-auth-page .glass {
+  background: rgba(17, 24, 39, 0.82) !important;
+  border-color: rgba(75, 85, 99, 0.65) !important;
+  backdrop-filter: blur(18px);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35) !important;
+}
+
+.enderpanel-auth-page .input-field {
+  background: rgba(31, 41, 55, 0.92) !important;
+  border-color: rgba(75, 85, 99, 0.9) !important;
+  color: #ffffff !important;
+}
+
+.enderpanel-auth-page .input-field::placeholder {
+  color: #9ca3af !important;
+}
+
+.enderpanel-auth-page .input-field:focus {
+  background: rgba(31, 41, 55, 0.96) !important;
+  border-color: rgb(168, 85, 247) !important;
+  box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.2) !important;
+}
+
+.enderpanel-auth-page .btn-primary {
+  background-image: linear-gradient(to right, rgb(168, 85, 247), rgb(236, 72, 153)) !important;
+  color: #ffffff !important;
+  box-shadow: 0 16px 40px rgba(168, 85, 247, 0.25) !important;
+}
+
+.enderpanel-auth-page .btn-primary:hover {
+  background-image: linear-gradient(to right, rgb(147, 51, 234), rgb(219, 39, 119)) !important;
+}
+
 .theme-dqs .dqs-auth-page {
   background:
     radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 32%),
@@ -636,6 +682,18 @@
 }
 
 .theme-dqs .server-console-controls {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--dqs-bg-input);
+  border: 1px solid var(--dqs-border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 16px !important;
+}
+
+.theme-dqs .server-console-controls .server-console-primary-actions {
   display: none !important;
 }
 
@@ -685,15 +743,38 @@
   gap: 16px;
 }
 
-.theme-dqs .dqs-server-page .flex.gap-2.mb-4:first-child {
-  background: var(--dqs-bg-input);
-  border: 1px solid var(--dqs-border);
-  border-radius: 10px;
-  padding: 10px;
+.theme-dqs .dqs-console-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
-.theme-dqs .dqs-server-page .flex.gap-2.mb-4:first-child button {
+.theme-dqs .dqs-console-toolbar .dqs-console-action-btn,
+.theme-dqs .dqs-console-toolbar .dqs-console-status-pill {
   min-height: 36px;
+}
+
+.theme-dqs .dqs-console-toolbar .dqs-console-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--dqs-border);
+  color: var(--dqs-text-muted) !important;
+}
+
+.theme-dqs .dqs-console-toolbar .dqs-console-action-btn {
+  background: var(--dqs-bg-card);
+  border-color: var(--dqs-border);
+  color: var(--dqs-text-muted) !important;
+}
+
+.theme-dqs .dqs-console-toolbar .dqs-console-action-btn:hover {
+  background: var(--dqs-bg-hover);
+  border-color: #2b2b2b;
+  color: var(--dqs-text-main) !important;
 }
 
 .theme-dqs .dqs-server-page .bg-gradient-to-r.from-yellow-600.to-yellow-700 {
@@ -709,7 +790,7 @@
   border-color: rgba(234, 179, 8, 0.5) !important;
 }
 
-.theme-dqs .dqs-server-page [ref="consoleRef"],
+.theme-dqs .dqs-server-page .dqs-console-terminal,
 .theme-dqs .dqs-server-page .font-mono.text-green-400 {
   background: #050505 !important;
   color: #4ade80 !important;
@@ -919,8 +1000,48 @@
   min-height: 100%;
 }
 
+.dqs-dashboard-page .dashboard-server-card {
+  position: relative;
+  isolation: isolate;
+  transition:
+    transform 220ms ease,
+    box-shadow 220ms ease,
+    border-color 220ms ease,
+    background-color 220ms ease;
+}
+
+.dqs-dashboard-page .dashboard-server-card:hover {
+  transform: translateY(-7px) scale(1.015);
+}
+
+.dqs-dashboard-page .dashboard-server-card .dqs-server-meta {
+  transition: transform 220ms ease, border-color 220ms ease, background-color 220ms ease;
+}
+
+.dqs-dashboard-page .dashboard-server-card:hover .dqs-server-meta {
+  transform: translateY(-1px);
+}
+
+.dqs-dashboard-page .dashboard-server-card h3,
+.dqs-dashboard-page .dashboard-server-card .badge-running,
+.dqs-dashboard-page .dashboard-server-card .badge-stopped {
+  transition: transform 220ms ease, color 220ms ease, box-shadow 220ms ease;
+}
+
+.dqs-dashboard-page .dashboard-server-card:hover h3 {
+  transform: translateX(2px);
+}
+
 :not(.theme-dqs) .dqs-dashboard-page {
   max-width: 1440px !important;
+}
+
+:not(.theme-dqs) .dqs-dashboard-page .dashboard-server-card:hover {
+  box-shadow: 0 18px 36px rgba(17, 24, 39, 0.12), 0 6px 16px rgba(139, 92, 246, 0.1);
+}
+
+.dark:not(.theme-dqs) .dqs-dashboard-page .dashboard-server-card:hover {
+  box-shadow: 0 20px 42px rgba(2, 6, 23, 0.45), 0 0 0 1px rgba(168, 85, 247, 0.08);
 }
 
 @media (min-width: 1280px) {
@@ -937,6 +1058,23 @@
 
 .theme-dqs .dqs-dashboard-page .dqs-server-card .grid.grid-cols-2 {
   gap: 8px !important;
+}
+
+.theme-dqs .dqs-dashboard-page .dashboard-server-card:hover {
+  border-color: rgba(61, 111, 255, 0.35) !important;
+  box-shadow:
+    0 22px 40px rgba(0, 0, 0, 0.34),
+    0 0 0 1px rgba(61, 111, 255, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.02) !important;
+}
+
+.theme-dqs .dqs-dashboard-page .dashboard-server-card:hover h3 {
+  color: #f8fbff;
+}
+
+.theme-dqs .dqs-dashboard-page .dashboard-server-card:hover .dqs-server-meta {
+  border-color: rgba(61, 111, 255, 0.22) !important;
+  background: rgba(24, 24, 24, 0.98) !important;
 }
 
 .theme-dqs .dqs-dashboard-page .dqs-server-meta {

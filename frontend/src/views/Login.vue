@@ -1,41 +1,22 @@
 <template>
-  <div :class="['min-h-screen flex items-center justify-center px-4 relative overflow-hidden', { 'dqs-auth-page': isDqsTheme }]">
+  <div class="enderpanel-auth-page min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
     <div class="absolute inset-0 pointer-events-none">
       <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse-slow"></div>
       <div class="absolute bottom-1/4 right-1/4 w-96 h-96 bg-pink-500/10 rounded-full blur-3xl animate-pulse-slow" style="animation-delay: 1.5s"></div>
     </div>
 
-    <div class="absolute top-4 right-4">
-      <button @click="themeStore.toggle()" 
-        class="p-3 rounded-xl bg-white/10 dark:bg-white/5 text-gray-600 dark:text-gray-400 
-               hover:bg-white/20 dark:hover:bg-white/10 transition-all duration-200 backdrop-blur-sm">
-        <svg v-if="themeStore.isDark" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
-        </svg>
-        <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
-        </svg>
-      </button>
-    </div>
-
     <div class="w-full max-w-md animate-fade-up relative z-10">
       <div class="text-center mb-8">
-        <template v-if="isDqsTheme">
-          <img :src="dqsLogoSrc" alt="dqs hosting" class="h-12 w-auto mx-auto mb-4 object-contain" />
-          <p class="text-gray-500 dark:text-gray-400">Sign in to manage your servers</p>
-        </template>
-        <template v-else>
-          <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-purple-500 via-pink-500 to-purple-700 rounded-2xl mb-4 
-                      shadow-lg shadow-purple-500/30 animate-float relative overflow-hidden">
-            <div class="absolute inset-2 bg-gradient-to-br from-pink-300 to-purple-400 rounded-xl opacity-80"></div>
-            <div class="absolute w-4 h-4 bg-white rounded-full top-3 left-3 opacity-90 shadow-lg shadow-white/50"></div>
-          </div>
-          <h1 class="text-3xl font-bold bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent mb-2">EnderPanel</h1>
-          <p class="text-gray-500 dark:text-gray-400">Sign in to manage your servers</p>
-        </template>
+        <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-purple-500 via-pink-500 to-purple-700 rounded-2xl mb-4 
+                    shadow-lg shadow-purple-500/30 animate-float relative overflow-hidden">
+          <div class="absolute inset-2 bg-gradient-to-br from-pink-300 to-purple-400 rounded-xl opacity-80"></div>
+          <div class="absolute w-4 h-4 bg-white rounded-full top-3 left-3 opacity-90 shadow-lg shadow-white/50"></div>
+        </div>
+        <h1 class="text-3xl font-bold bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent mb-2">EnderPanel</h1>
+        <p class="text-gray-500 dark:text-gray-400">Sign in to manage your servers</p>
       </div>
 
-      <div class="glass rounded-2xl p-8 shadow-2xl shadow-gray-200/50 dark:shadow-black/50 dqs-auth-card">
+      <div class="glass rounded-2xl p-8 shadow-2xl shadow-gray-200/50 dark:shadow-black/50">
         <transition name="shake">
           <div v-if="error" class="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 text-red-600 dark:text-red-400 px-4 py-3 rounded-xl mb-6 text-sm flex items-center gap-2">
             <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -114,13 +95,11 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { useThemeStore } from '../stores/theme'
 
 const authStore = useAuthStore()
-const themeStore = useThemeStore()
 const router = useRouter()
 const username = ref('')
 const password = ref('')
@@ -128,8 +107,6 @@ const error = ref('')
 const loading = ref(false)
 const requires2FA = ref(false)
 const totpCode = ref('')
-const isDqsTheme = computed(() => themeStore.currentTheme === 'dqs-hosting')
-const dqsLogoSrc = `${window.location.origin}/branding/dqs-hosting-logo.png`
 
 async function handleLogin() {
   error.value = ''
@@ -137,8 +114,7 @@ async function handleLogin() {
   try {
     const code = totpCode.value ? totpCode.value.replace(/\s/g, '') : null
     await authStore.login(username.value, password.value, requires2FA.value ? code : null)
-    const welcomeShown = localStorage.getItem('welcome_shown')
-    if (!welcomeShown) {
+    if (!authStore.hasCompletedWelcome()) {
       router.push('/welcome')
     } else {
       router.push('/dashboard')

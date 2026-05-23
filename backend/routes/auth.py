@@ -30,13 +30,18 @@ class UserCreate(BaseModel):
     password: str
 
 def user_to_dict(user: User) -> dict:
+    theme = user.theme or "dark"
+    dqs_layout = user.dqs_layout or ("top" if theme == "dqs-hosting" else "sidebar")
     return {
         "id": user.id,
         "username": user.username,
         "email": user.email,
         "is_admin": user.is_admin,
         "avatar": f"/api/avatars/{user.avatar}" if user.avatar else None,
-        "totp_enabled": bool(user.totp_secret)
+        "totp_enabled": bool(user.totp_secret),
+        "theme": theme,
+        "dqs_layout": dqs_layout,
+        "welcome_completed": bool(user.welcome_completed),
     }
 
 @router.post("/register")
@@ -149,4 +154,30 @@ def disable_2fa(data: Disable2FA, db: Session = Depends(get_db), current_user: U
 def get_me(response: Response, current_user: User = Depends(get_current_user)):
     token = create_access_token({"sub": current_user.username})
     response.headers["X-EnderPanel-Token"] = token
+    return user_to_dict(current_user)
+
+
+class UserPreferencesUpdate(BaseModel):
+    theme: Optional[str] = None
+    dqs_layout: Optional[str] = None
+    welcome_completed: Optional[bool] = None
+
+
+@router.post("/preferences")
+def update_preferences(data: UserPreferencesUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if data.theme is not None:
+        if data.theme not in {"light", "dark", "dqs-hosting"}:
+            raise HTTPException(status_code=400, detail="Invalid theme")
+        current_user.theme = data.theme
+
+    if data.dqs_layout is not None:
+        if data.dqs_layout not in {"top", "sidebar"}:
+            raise HTTPException(status_code=400, detail="Invalid DQS layout")
+        current_user.dqs_layout = data.dqs_layout
+
+    if data.welcome_completed is not None:
+        current_user.welcome_completed = bool(data.welcome_completed)
+
+    db.commit()
+    db.refresh(current_user)
     return user_to_dict(current_user)

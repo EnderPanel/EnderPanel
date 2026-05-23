@@ -1,15 +1,15 @@
 <template>
   <div class="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-8 dqs-page-shell dqs-server-page">
-    <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-8 animate-fade-up dqs-page-header">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-8 animate-fade-up min-w-0 dqs-page-header">
       <button @click="$router.push('/dashboard')" 
-        class="flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition group">
+        class="flex shrink-0 items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition group">
         <svg class="w-5 h-5 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
         </svg>
         Back
       </button>
-      <div class="flex items-center gap-4">
-        <div class="relative group">
+      <div class="flex min-w-0 flex-1 items-center gap-4">
+        <div class="relative shrink-0 group">
           <input type="file" ref="serverAvatarInput" @change="uploadServerAvatar" accept="image/*" class="hidden" />
           <button @click="$refs.serverAvatarInput.click()" 
             class="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center hover:ring-2 hover:ring-mc-accent/50 transition-all duration-200">
@@ -20,22 +20,22 @@
               </svg>
             </div>
           </button>
-          <div class="absolute -bottom-1 -right-1 w-5 h-5 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+          <div class="absolute bottom-0 right-0 w-5 h-5 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
             <svg class="w-3 h-3 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
             </svg>
           </div>
         </div>
-        <div>
+        <div class="min-w-0">
           <p class="dqs-overline">Server Control</p>
-          <h1 class="text-2xl font-bold">{{ server?.name }}</h1>
-          <div class="flex items-center gap-2 mt-1">
+          <h1 class="text-2xl font-bold break-words">{{ server?.name }}</h1>
+          <div class="flex flex-wrap items-center gap-2 mt-1">
             <span :class="server?.status === 'running' ? 'status-dot-running' : 'status-dot-stopped'"></span>
             <span :class="server?.status === 'running' ? 'badge-running' : 'badge-stopped'">
               {{ server?.status }}
             </span>
-            <span class="text-gray-500 text-xs">{{ server?.server_type }} {{ server?.version }}</span>
+            <span class="text-gray-500 text-xs break-words">{{ server?.server_type }} {{ server?.version }}</span>
           </div>
         </div>
       </div>
@@ -62,7 +62,7 @@
       </div>
     </div>
 
-    <div class="flex gap-2 mb-6 overflow-x-auto pb-2 animate-slide-up dqs-tab-strip">
+    <div class="flex flex-wrap gap-2 mb-6 pb-2 animate-slide-up dqs-tab-strip">
       <button v-for="tab in tabs" :key="tab.id" @click="switchTab(tab.id)"
         :class="activeTab === tab.id 
           ? 'bg-gradient-to-r from-mc-accent to-blue-500 text-white shadow-lg shadow-mc-accent/20' 
@@ -75,60 +75,98 @@
     <div class="glass rounded-2xl p-3 sm:p-6 dqs-server-shell">
       <div class="tab-content">
       <div v-show="activeTab === 'console'">
-        <div class="flex gap-2 mb-4 server-console-controls">
-          <button @click="startServer" :disabled="server?.status === 'running'" 
-            class="btn-success text-sm py-2 flex items-center gap-2 disabled:opacity-50">
-            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/>
-            </svg>
-            Start
-          </button>
-          <button @click="stopServer" :disabled="server?.status !== 'running'" 
-            class="btn-danger text-sm py-2 flex items-center gap-2 disabled:opacity-50">
-            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd"/>
-            </svg>
-            Stop
-          </button>
-          <button @click="restartServer" :disabled="server?.status !== 'running'" 
-            class="bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-500 hover:to-yellow-600 
-                   text-white font-semibold px-5 py-2 rounded-xl transition-all duration-300 
-                   hover:shadow-lg hover:shadow-yellow-500/25 text-sm flex items-center gap-2 disabled:opacity-50">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-            </svg>
-            Restart
-          </button>
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4 server-console-controls dqs-console-toolbar">
+          <div class="flex gap-2 server-console-primary-actions">
+            <button @click="startServer" :disabled="server?.status === 'running'"
+              class="btn-success text-sm py-2 flex items-center gap-2 disabled:opacity-50">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/>
+              </svg>
+              Start
+            </button>
+            <button @click="stopServer" :disabled="server?.status !== 'running'"
+              class="btn-danger text-sm py-2 flex items-center gap-2 disabled:opacity-50">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd"/>
+              </svg>
+              Stop
+            </button>
+            <button @click="restartServer" :disabled="server?.status !== 'running'"
+              class="bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-500 hover:to-yellow-600
+                     text-white font-semibold px-5 py-2 rounded-xl transition-all duration-300
+                     hover:shadow-lg hover:shadow-yellow-500/25 text-sm flex items-center gap-2 disabled:opacity-50">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+              Restart
+            </button>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 text-xs sm:text-sm dqs-console-toolbar-actions">
+            <span
+              class="rounded-full border px-3 py-1 font-medium dqs-console-status-pill"
+              :class="consoleStatusBadgeClass"
+            >
+              {{ consoleStatusLabel }}
+            </span>
+            <button @click="toggleConsoleAutoScroll" class="dqs-console-action-btn rounded-lg border border-gray-200 px-3 py-1.5 text-gray-600 transition hover:bg-gray-100 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/5">
+              {{ consoleAutoScroll ? 'Auto-scroll on' : 'Auto-scroll off' }}
+            </button>
+            <button @click="copyConsoleOutput" class="dqs-console-action-btn rounded-lg border border-gray-200 px-3 py-1.5 text-gray-600 transition hover:bg-gray-100 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/5">
+              Copy
+            </button>
+            <button @click="clearConsoleHistory" class="dqs-console-action-btn rounded-lg border border-gray-200 px-3 py-1.5 text-gray-600 transition hover:bg-gray-100 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/5">
+              Clear
+            </button>
+          </div>
         </div>
-        <div ref="consoleRef" class="bg-gray-900 dark:bg-black/80 rounded-xl p-4 h-96 overflow-y-auto font-mono text-sm text-green-400 mb-4 border border-gray-200 dark:border-white/5">
-          <div v-for="(line, i) in consoleLines" :key="i" class="animate-fade-in">{{ line }}</div>
-        </div>
+        <div ref="consoleRef" class="server-terminal dqs-console-terminal bg-gray-950 rounded-xl h-96 mb-4 border border-gray-200 dark:border-white/5 overflow-hidden"></div>
         <div class="flex gap-2">
-          <input v-model="command" @keyup.enter="sendCommand" type="text" placeholder="Enter command..." :disabled="server?.status !== 'running'"
+          <input
+            v-model="command"
+            @keyup.enter="sendCommand"
+            @keydown.up.prevent="recallPreviousCommand"
+            @keydown.down.prevent="recallNextCommand"
+            type="text"
+            placeholder="Enter command..."
+            :disabled="server?.status !== 'running'"
             class="flex-1 input-field font-mono" />
           <button @click="sendCommand" :disabled="server?.status !== 'running'" class="btn-primary disabled:opacity-50">Send</button>
         </div>
       </div>
 
       <div v-show="activeTab === 'files'">
-        <div class="flex items-center justify-between mb-4">
-          <div class="flex items-center gap-2 text-sm">
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
+          <div class="flex items-center gap-2 text-sm min-w-0 flex-wrap">
             <button @click="navigateTo('')" class="text-mc-accent hover:underline flex items-center gap-1">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
               </svg>
               root
             </button>
-            <span v-for="(part, i) in currentPath.split('/').filter(Boolean)" :key="i" class="flex items-center gap-2">
+            <span v-for="(part, i) in currentPathParts" :key="i" class="flex items-center gap-2 min-w-0">
               <span class="text-gray-600">/</span>
-              <button @click="navigateTo(currentPath.split('/').slice(0, i + 1).join('/'))" class="text-mc-accent hover:underline">{{ part }}</button>
+              <button @click="navigateTo(currentPathParts.slice(0, i + 1).join('/'))" class="text-mc-accent hover:underline truncate max-w-[14rem]">{{ part }}</button>
             </span>
           </div>
-          <button @click="navigateTo(currentPath)" class="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-            </svg>
-          </button>
+          <div class="flex items-center gap-2">
+            <div class="relative flex-1 min-w-[220px]">
+              <input
+                v-model="fileSearchQuery"
+                @keyup.enter="runFileSearch"
+                type="text"
+                placeholder="Search files and folders..."
+                class="input-field pr-24"
+              />
+              <button @click="runFileSearch" :disabled="searchingFiles || fileSearchQuery.trim().length < 2" class="absolute right-1.5 top-1.5 px-3 py-2 rounded-lg bg-mc-accent text-white text-sm disabled:opacity-50">
+                {{ searchingFiles ? '...' : 'Search' }}
+              </button>
+            </div>
+            <button @click="navigateTo(currentPath)" class="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+            </button>
+          </div>
         </div>
         <div class="mb-4 p-4 rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5">
           <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
@@ -159,27 +197,56 @@
           </div>
           <div v-else class="text-xs text-gray-500 dark:text-gray-400">SFTP access is visible only to admins.</div>
         </div>
-        <div class="flex gap-2 mb-4">
-          <button @click="showUpload = true" class="btn-primary text-sm py-2 flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
-            </svg>
-            Upload
-          </button>
-          <button @click="createFolder" class="bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-xl text-sm transition flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
-            </svg>
-            New Folder
-          </button>
+        <div class="rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 p-4 mb-4 space-y-4">
+          <div class="flex flex-wrap gap-2">
+            <button @click="openUploadModal" class="btn-primary text-sm py-2 flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+              </svg>
+              Upload
+            </button>
+            <button @click="openCreateFolderModal" class="bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-xl text-sm transition flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+              </svg>
+              New Folder
+            </button>
+            <button @click="openArchiveModal" :disabled="!hasSelectedFiles" class="bg-emerald-100 dark:bg-emerald-500/15 hover:bg-emerald-200 dark:hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300 px-4 py-2 rounded-xl text-sm transition flex items-center gap-2 disabled:opacity-50">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h16M4 12h16m-7 5h7"/>
+              </svg>
+              Archive Selected
+            </button>
+            <button v-if="hasSelectedFiles" @click="clearSelectedFiles" class="bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-xl text-sm transition">
+              Clear Selection
+            </button>
+          </div>
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm">
+            <p class="text-gray-500 dark:text-gray-400">
+              {{ hasSelectedFiles ? `${selectedFiles.length} item${selectedFiles.length === 1 ? '' : 's'} selected` : 'Select files or folders to archive them together.' }}
+            </p>
+            <p class="text-xs text-gray-500 dark:text-gray-500">
+              Upload limit: {{ formatSize(fileLimits.upload_limit_bytes) }} per file
+            </p>
+          </div>
         </div>
         <div class="space-y-1">
+          <div v-if="files.length === 0" class="rounded-2xl border border-dashed border-gray-200 dark:border-white/10 bg-gray-50/70 dark:bg-white/5 px-5 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+            This folder is empty.
+          </div>
           <div v-for="file in files" :key="file.name"
-            @click="file.is_dir ? navigateTo(currentPath ? currentPath + '/' + file.name : file.name) : editFile(currentPath ? currentPath + '/' + file.name : file.name)"
-            class="flex justify-between items-center px-4 py-3 rounded-xl hover:bg-gray-100 dark:hover:bg-white/5 cursor-pointer group transition-all duration-200">
-            <div class="flex items-center gap-3">
-              <div :class="file.is_dir ? 'bg-yellow-100 dark:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400' : 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400'" 
-                class="w-8 h-8 rounded-lg flex items-center justify-center">
+            @click="openFileEntry(file)"
+            class="flex justify-between items-center gap-4 px-4 py-3 rounded-xl hover:bg-gray-100 dark:hover:bg-white/5 cursor-pointer group transition-all duration-200 overflow-hidden">
+            <div class="flex items-center gap-3 min-w-0 flex-1">
+              <input
+                type="checkbox"
+                :checked="isFileSelected(currentPath ? currentPath + '/' + file.name : file.name)"
+                @click.stop
+                @change="toggleFileSelection(currentPath ? currentPath + '/' + file.name : file.name)"
+                class="rounded border-gray-300 dark:border-white/10"
+              />
+              <div :class="file.is_dir ? 'bg-yellow-100 dark:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400' : 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400'"
+                class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0">
                 <svg v-if="file.is_dir" class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
                 </svg>
@@ -187,12 +254,22 @@
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                 </svg>
               </div>
-              <span>{{ file.name }}</span>
+              <div class="min-w-0">
+                <p class="truncate">{{ file.name }}</p>
+                <p class="text-xs text-gray-500 dark:text-gray-500">
+                  {{ file.is_dir ? 'Folder' : formatSize(file.size) }} • {{ formatTimestamp(file.modified) }}
+                </p>
+              </div>
             </div>
-            <div class="flex items-center gap-4">
-              <span class="text-gray-500 dark:text-gray-500 text-sm">{{ formatSize(file.size) }}</span>
+            <div class="flex items-center gap-2 shrink-0">
+              <button @click.stop="openRenameModalFor(file)" class="text-gray-500 dark:text-gray-400 hover:text-mc-accent text-sm px-2 py-1 rounded-lg hover:bg-white/70 dark:hover:bg-white/10 transition">
+                Rename
+              </button>
+              <button v-if="!file.is_dir && canExtractFile(file.name)" @click.stop="extractFile(currentPath ? currentPath + '/' + file.name : file.name)" class="text-emerald-600 dark:text-emerald-300 hover:text-emerald-500 text-sm px-2 py-1 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition">
+                Extract
+              </button>
               <button @click.stop="deleteFile(currentPath ? currentPath + '/' + file.name : file.name)"
-                class="text-red-500 opacity-0 group-hover:opacity-100 transition text-sm flex items-center gap-1">
+                class="text-red-500 opacity-0 group-hover:opacity-100 transition text-sm flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                 </svg>
@@ -560,26 +637,17 @@
 
       <div v-show="activeTab === 'playit'">
         <div class="space-y-6">
-          <div class="rounded-2xl border border-blue-200/70 dark:border-blue-500/20 bg-gradient-to-br from-blue-50/80 via-sky-50/60 to-white dark:from-blue-500/10 dark:via-sky-500/5 dark:to-transparent p-6 dqs-playit-intro">
-            <div class="flex items-start gap-3">
-                <div class="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-300 flex-shrink-0">
+          <div class="dqs-playit-intro rounded-2xl border border-sky-200/70 dark:border-sky-500/20 bg-gradient-to-br from-sky-50/80 via-cyan-50/60 to-white dark:from-sky-500/15 dark:via-cyan-500/10 dark:to-sky-500/5 p-6 overflow-hidden">
+            <div class="flex items-start gap-3 w-full">
+                <div class="w-10 h-10 rounded-xl bg-sky-100 dark:bg-sky-500/20 flex items-center justify-center text-sky-600 dark:text-sky-300 flex-shrink-0">
                   <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4H8l5-8v4h4l-4 8z"/>
                   </svg>
                 </div>
-                <div class="space-y-2">
-                  <div class="flex flex-wrap items-center gap-2 dqs-playit-title-row">
-                    <h3 class="text-lg font-semibold">Playit Integration</h3>
-                    <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-white/70 dark:bg-white/10 text-blue-700 dark:text-blue-200 border border-blue-200/70 dark:border-blue-400/20">
-                      Unofficial integration
-                    </span>
+                <div class="space-y-2 flex-1 min-w-0">
+                  <div class="dqs-playit-title-row flex flex-wrap items-center gap-2">
+                    <h3 class="text-lg font-semibold">Playit Agent</h3>
                   </div>
-                  <p class="text-sm text-blue-900/80 dark:text-blue-100/80">
-                    EnderPanel is not owned by or associated with Playit beyond integrating with Playit's network.
-                  </p>
-                  <p class="text-sm text-blue-900/80 dark:text-blue-100/80">
-                    This follows Playit's third-party rules (please dont sue us).
-                  </p>
                 </div>
               </div>
           </div>
@@ -589,17 +657,17 @@
               <div class="bg-gray-50 dark:bg-white/5 rounded-2xl border border-gray-200 dark:border-white/10 p-6">
                 <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                   <div>
-                    <h4 class="font-semibold text-lg">Connect Playit</h4>
+                    <h4 class="font-semibold text-lg">Enable and Claim Playit</h4>
                     <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                      Open your Playit agents page, grab the one-time setup code, then use the Connect modal so EnderPanel can handle the rest.
+                      If Playit says the agent is offline during the claim stay on the page after the claim is done it will automatically make a tunnel and print it in the panel
                     </p>
                   </div>
                   <div class="flex flex-col sm:flex-row gap-2">
-                    <button @click="openPlayitConnectModal" :disabled="playitBusy"
+                    <button @click="enablePlayit" :disabled="playitBusy"
                       class="btn-success text-sm text-center disabled:opacity-50">
-                      {{ playitStatus.linked ? 'Reconnect' : 'Connect' }}
+                      {{ playitBusy ? 'Working...' : (playitStatus.enabled ? 'Refresh Playit' : 'Enable Playit') }}
                     </button>
-                    <button v-if="playitStatus.linked" @click="disconnectPlayit" :disabled="playitBusy"
+                    <button v-if="playitStatus.enabled" @click="disconnectPlayit" :disabled="playitBusy"
                       class="bg-red-100 dark:bg-red-500/20 hover:bg-red-200 dark:hover:bg-red-500/30 text-red-700 dark:text-red-300 px-4 py-2 rounded-xl text-sm transition disabled:opacity-50">
                       Disconnect
                     </button>
@@ -611,41 +679,40 @@
                     <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Quick steps</p>
                     <div class="mt-3 space-y-3 text-sm">
                       <div class="flex gap-3">
-                        <span class="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 flex items-center justify-center text-xs font-semibold flex-shrink-0">1</span>
-                        <p>Click <span class="font-medium">Connect</span> then click <span class="font-medium">Open Setup Page</span>.</p>
+                        <span class="w-6 h-6 rounded-full bg-sky-100 dark:bg-sky-500/20 text-sky-700 dark:text-sky-300 flex items-center justify-center text-xs font-semibold flex-shrink-0">1</span>
+                        <p>Click <span class="font-medium">Enable Playit</span> while the server is running, or enable it first and then start the server.</p>
                       </div>
                       <div class="flex gap-3">
-                        <span class="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 flex items-center justify-center text-xs font-semibold flex-shrink-0">2</span>
-                        <p>On the Playit website select <span class="font-medium">Other</span>, copy the code and paste it into the box.</p>
+                        <span class="w-6 h-6 rounded-full bg-sky-100 dark:bg-sky-500/20 text-sky-700 dark:text-sky-300 flex items-center justify-center text-xs font-semibold flex-shrink-0">2</span>
+                        <p>If this is the first launch, Playit prints a claim link. Open it and add the agent to your Playit account.</p>
                       </div>
                       <div class="flex gap-3">
-                        <span class="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 flex items-center justify-center text-xs font-semibold flex-shrink-0">✓</span>
-                        <p>You're done! Your server gets a free public address to share with friends. :)</p>
+                        <span class="w-6 h-6 rounded-full bg-sky-100 dark:bg-sky-500/20 text-sky-700 dark:text-sky-300 flex items-center justify-center text-xs font-semibold flex-shrink-0">3</span>
+                        <p>Once claimed, EnderPanel will keep syncing the agent and show the public Playit address here.</p>
                       </div>
                     </div>
                   </div>
 
                   <div class="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-black/10 p-4 space-y-4">
-                    <div v-if="playitStatus.connection_error" class="rounded-xl border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 p-4 text-sm text-red-700 dark:text-red-300">
-                      Can't connect to EnderPanel Playit server.
-                      <div class="mt-2 text-xs opacity-80">The hosted EnderPanel Playit service could not be reached.</div>
+                    <div v-if="playitStatus.tunnel_create_detail" class="rounded-xl border border-yellow-200 dark:border-yellow-500/20 bg-yellow-50 dark:bg-yellow-500/10 p-4 text-sm text-yellow-700 dark:text-yellow-300">
+                      {{ playitStatus.tunnel_create_detail }}
                     </div>
 
-                    <div v-if="!playitStatus.connection_error && !playitStatus.partner_configured" class="rounded-xl border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 p-4 text-sm text-red-700 dark:text-red-300">
-                      The external Playit service is not configured yet. Set <code>PLAYIT_PARTNER_API_KEY</code> and <code>PLAYIT_VARIANT_ID</code> on your standalone Playit service, not in the EnderPanel backend.
+                    <div v-if="!playitStatus.linked && playitStatus.claim_url" class="rounded-xl border border-sky-200 dark:border-sky-500/20 bg-sky-50 dark:bg-sky-500/10 p-4">
+                      <p class="text-xs uppercase tracking-wide text-sky-700 dark:text-sky-300 mb-1">Claim link</p>
+                      <button @click="openPlayitClaimLink" type="button" class="font-mono text-left text-sm break-all text-sky-900 dark:text-sky-100 underline">
+                        {{ playitStatus.claim_url }}
+                      </button>
                     </div>
 
-                    <a
-                      :href="playitStatus.dashboard_url"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="flex items-center justify-center gap-3 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-semibold px-5 py-4 text-base shadow-lg shadow-sky-500/20 transition-all duration-200"
-                    >
-                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-                      </svg>
-                      Open Playit Agents
-                    </a>
+                    <div class="space-y-3">
+                      <a :href="playitStatus.dashboard_url" target="_blank" rel="noopener noreferrer" class="btn-primary w-full text-center">
+                        Open Playit Dashboard
+                      </a>
+                      <button @click="syncPlayitStatus" :disabled="playitBusy" class="w-full bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 py-3 rounded-xl transition disabled:opacity-50">
+                        Refresh Status
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -656,21 +723,21 @@
                 <h4 class="font-semibold text-lg mb-4">Current Snapshot</h4>
                 <div class="grid gap-3">
                   <div class="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-black/10 px-4 py-3 flex items-center justify-between gap-3">
-                    <span class="text-sm text-gray-500 dark:text-gray-400">Server status</span>
-                    <span class="text-sm font-medium" :class="playitStatus.server_running ? 'text-emerald-600 dark:text-emerald-300' : 'text-gray-700 dark:text-gray-200'">
-                      {{ playitStatus.server_running ? 'Running' : 'Stopped' }}
+                    <span class="text-sm text-gray-500 dark:text-gray-400">Playit enabled</span>
+                    <span class="text-sm font-medium" :class="playitStatus.enabled ? 'text-emerald-600 dark:text-emerald-300' : 'text-gray-700 dark:text-gray-200'">
+                      {{ playitStatus.enabled ? 'Enabled' : 'Disabled' }}
                     </span>
                   </div>
                   <div class="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-black/10 px-4 py-3 flex items-center justify-between gap-3">
-                    <span class="text-sm text-gray-500 dark:text-gray-400">Local agent</span>
+                    <span class="text-sm text-gray-500 dark:text-gray-400">Agent status</span>
                     <span class="text-sm font-medium" :class="playitStatus.agent_running ? 'text-emerald-600 dark:text-emerald-300' : 'text-gray-700 dark:text-gray-200'">
-                      {{ playitStatus.agent_running ? 'Connected' : 'Not running' }}
+                      {{ playitStatus.agent_running ? 'Running' : 'Stopped' }}
                     </span>
                   </div>
                   <div class="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-black/10 px-4 py-3 flex items-center justify-between gap-3">
-                    <span class="text-sm text-gray-500 dark:text-gray-400">Saved tunnel ID</span>
+                    <span class="text-sm text-gray-500 dark:text-gray-400">Linked account</span>
                     <span class="text-sm font-mono text-gray-800 dark:text-gray-100 break-all text-right">
-                      {{ playitStatus.saved_tunnel_id || 'None yet' }}
+                      {{ playitStatus.linked ? (playitStatus.agent_secret_masked || 'Claimed') : 'Not claimed yet' }}
                     </span>
                   </div>
                 </div>
@@ -679,36 +746,49 @@
               <div class="bg-gray-50 dark:bg-white/5 rounded-2xl border border-gray-200 dark:border-white/10 p-6">
                 <h4 class="font-semibold text-lg mb-4">Public Address</h4>
                 <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                  EnderPanel fetches the public Playit hostname automatically once the tunnel is ready.
+                  Once the agent is claimed and the tunnel is ready, this is the Playit address players should use.
                 </p>
-                <div v-if="playitStatus.saved_domain" class="mt-4 rounded-xl border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 p-4">
-                  <p class="text-xs uppercase tracking-wide text-emerald-700 dark:text-emerald-300 mb-1">Saved address</p>
-                  <p class="font-mono text-sm break-all">{{ playitStatus.saved_domain }}</p>
+                <div v-if="playitStatus.saved_domain" class="mt-4 rounded-xl border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 p-4 space-y-3">
+                  <div class="flex items-start justify-between gap-3">
+                    <div>
+                      <p class="text-xs uppercase tracking-wide text-emerald-700 dark:text-emerald-300 mb-1">Join address</p>
+                      <p class="font-mono text-base sm:text-lg break-all text-emerald-900 dark:text-emerald-100">{{ playitStatus.saved_domain }}</p>
+                    </div>
+                    <button
+                      @click="copyPlayitAddress"
+                      class="flex-shrink-0 rounded-lg border border-emerald-300/70 dark:border-emerald-400/20 bg-white/80 dark:bg-emerald-500/10 px-3 py-1.5 text-sm text-emerald-700 dark:text-emerald-200 transition hover:bg-white dark:hover:bg-emerald-500/20"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <p class="text-sm text-emerald-800/80 dark:text-emerald-200/80">
+                    Players can join with this address.
+                  </p>
                 </div>
                 <div v-else class="mt-4 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-black/10 p-4">
                   <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Status</p>
                   <p class="text-sm text-gray-700 dark:text-gray-200">
-                    {{ playitStatus.tunnel_created
-                      ? 'Tunnel is created. Waiting for Playit address...'
-                      : (playitStatus.tunnel_create_detail || 'Start the server to create a Playit tunnel.') }}
+                    {{ playitStatus.linked
+                      ? (playitStatus.tunnel_created ? 'The tunnel is ready to share.' : (playitStatus.tunnel_create_detail || 'Waiting for Playit to create a tunnel for this server.'))
+                      : (playitStatus.claim_url ? 'Claim the agent first, then refresh this page.' : 'Enable Playit and wait for the claim link to appear.') }}
                   </p>
                 </div>
               </div>
 
               <div class="bg-gray-50 dark:bg-white/5 rounded-2xl border border-gray-200 dark:border-white/10 p-6">
-                <h4 class="font-semibold text-lg mb-4">Rules of the Road</h4>
+                <h4 class="font-semibold text-lg mb-4">How It Works</h4>
                 <div class="space-y-3 text-sm text-gray-600 dark:text-gray-300">
                   <div class="rounded-xl bg-white dark:bg-black/10 border border-gray-200 dark:border-white/10 px-4 py-3">
-                    Each EnderPanel user should link their own Playit account.
+                    Each server runs its own Playit sidecar container attached to the Minecraft server container.
                   </div>
                   <div class="rounded-xl bg-white dark:bg-black/10 border border-gray-200 dark:border-white/10 px-4 py-3">
-                    EnderPanel does not create Playit accounts for users.
+                    On the first launch, Playit prints a claim link in the agent logs. Claim that agent on the Playit website.
                   </div>
                   <div class="rounded-xl bg-white dark:bg-black/10 border border-gray-200 dark:border-white/10 px-4 py-3">
-                    The Playit website remains the place to manage premium, domains, and account settings.
+                    After the agent is claimed, EnderPanel reads the saved Playit secret from the server folder and can sync the tunnel automatically.
                   </div>
                   <div class="rounded-xl bg-white dark:bg-black/10 border border-gray-200 dark:border-white/10 px-4 py-3">
-                    If the server is stopped, the Playit sidecar stops too and restarts with the server.
+                    Disconnecting Playit removes the saved Playit config for this server and stops its agent container.
                   </div>
                 </div>
               </div>
@@ -793,14 +873,207 @@
         </div>
       </div>
 
-      <div v-show="activeTab === 'settings'">
-        <form @submit.prevent="saveSettings" class="space-y-4">
-          <div v-for="(value, key) in settings" :key="key">
-            <label class="block text-sm text-gray-600 dark:text-gray-400 mb-2">{{ key }}</label>
-            <input :value="value" @input="settings[key] = $event.target.value" type="text"
-              class="input-field font-mono text-sm" />
+      <div v-show="activeTab === 'tasks'">
+        <div class="space-y-4">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 class="font-semibold text-lg">Saved Tasks</h3>
+              <p class="text-sm text-gray-500 dark:text-gray-400">
+                Start, stop, restart, back up, or send console commands on a timer.
+              </p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button @click="fetchTasks" :disabled="tasksLoading" class="bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 px-4 py-2 rounded-xl text-sm transition disabled:opacity-50">
+                {{ tasksLoading ? 'Refreshing...' : 'Refresh' }}
+              </button>
+              <button @click="openTaskModalForCreate" class="btn-primary text-sm py-2 px-4">
+                New Task
+              </button>
+            </div>
           </div>
-          <button type="submit" class="btn-primary">Save Settings</button>
+
+          <div v-if="tasks.length === 0" class="text-center py-12 rounded-2xl border border-dashed border-gray-300 dark:border-white/10">
+            <div class="w-16 h-16 bg-gray-100 dark:bg-white/5 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <svg class="w-8 h-8 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10m-11 9h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2v11a2 2 0 002 2z"/>
+              </svg>
+            </div>
+            <p class="text-gray-500 dark:text-gray-500">No scheduled tasks yet</p>
+          </div>
+
+          <div v-else class="space-y-3">
+            <div v-for="task in tasks" :key="task.id" class="rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/[0.03] p-5 overflow-hidden">
+              <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-2 mb-2">
+                    <h4 class="font-semibold break-words min-w-0">{{ task.name }}</h4>
+                    <span class="text-xs px-2.5 py-1 rounded-full border" :class="taskStatusBadgeClass(task)">
+                      {{ taskStatusLabel(task) }}
+                    </span>
+                    <span class="text-xs px-2.5 py-1 rounded-full bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-300">
+                      {{ taskActionLabel(task.action) }}
+                    </span>
+                  </div>
+                  <p class="text-sm text-gray-500 dark:text-gray-400 break-words">
+                    {{ formatTaskSchedule(task) }}
+                    <span v-if="task.action === 'command' && task.command"> • <span class="font-mono break-all">{{ task.command }}</span></span>
+                  </p>
+                  <div class="mt-3 grid gap-2 sm:grid-cols-2 text-sm text-gray-600 dark:text-gray-300">
+                    <div>Next run: <span class="font-medium">{{ task.next_run_at ? formatDate(task.next_run_at) : 'Disabled' }}</span></div>
+                    <div>Last run: <span class="font-medium">{{ task.last_run_at ? formatDate(task.last_run_at) : 'Never' }}</span></div>
+                  </div>
+                  <div v-if="task.last_error" class="mt-3 rounded-xl border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300 break-words">
+                    {{ task.last_error }}
+                  </div>
+                </div>
+
+                <div class="flex flex-wrap gap-2 lg:justify-end lg:max-w-[45%]">
+                  <button @click="runTaskNow(task)" :disabled="runningTaskId === task.id" class="btn-success text-sm py-2 px-4 disabled:opacity-50">
+                    {{ runningTaskId === task.id ? 'Running...' : 'Run Now' }}
+                  </button>
+                  <button @click="editTask(task)" class="bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 px-4 py-2 rounded-xl text-sm transition">
+                    Edit
+                  </button>
+                  <button @click="toggleTaskEnabled(task)" class="px-4 py-2 rounded-xl text-sm transition"
+                    :class="task.enabled ? 'bg-yellow-100 dark:bg-yellow-500/20 hover:bg-yellow-200 dark:hover:bg-yellow-500/30 text-yellow-700 dark:text-yellow-300' : 'bg-emerald-100 dark:bg-emerald-500/20 hover:bg-emerald-200 dark:hover:bg-emerald-500/30 text-emerald-700 dark:text-emerald-300'">
+                    {{ task.enabled ? 'Disable' : 'Enable' }}
+                  </button>
+                  <button @click="deleteTask(task)" :disabled="deletingTaskId === task.id" class="bg-red-100 dark:bg-red-500/20 hover:bg-red-200 dark:hover:bg-red-500/30 text-red-700 dark:text-red-300 px-4 py-2 rounded-xl text-sm transition disabled:opacity-50">
+                    {{ deletingTaskId === task.id ? 'Deleting...' : 'Delete' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-show="activeTab === 'settings'">
+        <form @submit.prevent="saveSettings" class="space-y-6">
+          <div class="glass-panel p-5 sm:p-6">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h3 class="text-xl font-bold">Server Settings</h3>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Adjust the settings people actually use every day, without digging through raw property names.
+                </p>
+              </div>
+              <div class="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                server.properties
+              </div>
+            </div>
+          </div>
+
+          <div v-for="section in settingsSections" :key="section.title" class="glass-panel p-5 sm:p-6">
+            <div class="mb-5">
+              <h4 class="text-lg font-semibold">{{ section.title }}</h4>
+              <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">{{ section.description }}</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <template v-for="field in section.fields" :key="field.key">
+                <label
+                  v-if="field.type === 'boolean'"
+                  class="rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/[0.03] px-4 py-4 flex items-center justify-between gap-4"
+                >
+                  <div>
+                    <div class="font-medium">{{ field.label }}</div>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">{{ field.description }}</p>
+                  </div>
+                  <span class="relative inline-flex items-center flex-shrink-0">
+                    <input
+                      type="checkbox"
+                      class="sr-only peer"
+                      :checked="isBooleanSettingEnabled(field.key, field.defaultValue)"
+                      @change="setBooleanSetting(field.key, $event.target.checked)"
+                    />
+                    <div class="w-10 h-5 bg-gray-300 dark:bg-gray-600 rounded-full peer peer-checked:bg-emerald-500 transition"></div>
+                    <div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full peer-checked:translate-x-5 transition-transform"></div>
+                  </span>
+                </label>
+
+                <div
+                  v-else
+                  class="rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/[0.03] px-4 py-4"
+                >
+                  <div class="flex items-start justify-between gap-3 mb-2">
+                    <div>
+                      <label class="block font-medium">{{ field.label }}</label>
+                      <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">{{ field.description }}</p>
+                    </div>
+                    <span class="text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500 font-mono">
+                      {{ field.key }}
+                    </span>
+                  </div>
+
+                  <select
+                    v-if="field.type === 'select'"
+                    :value="getSettingValue(field.key, field.defaultValue)"
+                    @change="setSettingValue(field.key, $event.target.value)"
+                    class="input-field text-sm"
+                  >
+                    <option v-for="option in field.options" :key="option.value" :value="option.value">
+                      {{ option.label }}
+                    </option>
+                  </select>
+
+                  <input
+                    v-else-if="field.type === 'number'"
+                    :value="getSettingValue(field.key, field.defaultValue)"
+                    @input="setSettingValue(field.key, $event.target.value)"
+                    type="number"
+                    :min="field.min"
+                    :max="field.max"
+                    class="input-field text-sm"
+                  />
+
+                  <input
+                    v-else
+                    :value="getSettingValue(field.key, field.defaultValue)"
+                    @input="setSettingValue(field.key, $event.target.value)"
+                    type="text"
+                    :placeholder="field.placeholder || ''"
+                    class="input-field text-sm"
+                  />
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="glass-panel p-5 sm:p-6">
+            <div class="mb-5">
+              <h4 class="text-lg font-semibold">Advanced Properties</h4>
+              <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Anything unusual or modpack-specific still lives here, so we don't box you into only the pretty controls.
+              </p>
+            </div>
+
+            <div v-if="otherSettingsEntries.length === 0" class="rounded-2xl border border-dashed border-gray-300 dark:border-white/10 px-4 py-6 text-sm text-gray-500 dark:text-gray-400">
+              No extra properties outside the guided settings right now.
+            </div>
+
+            <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div
+                v-for="[key, value] in otherSettingsEntries"
+                :key="key"
+                class="rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/[0.03] px-4 py-4"
+              >
+                <label class="block font-medium mb-2">{{ key }}</label>
+                <input
+                  :value="value"
+                  @input="setSettingValue(key, $event.target.value)"
+                  type="text"
+                  class="input-field font-mono text-sm"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div class="flex justify-end">
+            <button type="submit" class="btn-primary">
+              Save Settings
+            </button>
+          </div>
         </form>
       </div>
       </div>
@@ -808,58 +1081,137 @@
   </div>
 
   <transition name="modal">
-    <div v-if="showPlayitConnectModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[999] p-4 dqs-modal-overlay" @click.self="closePlayitConnectModal">
-      <div class="glass rounded-2xl p-8 w-full max-w-lg scale-in dqs-modal-card">
+    <div v-if="showTaskModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[999] p-4 dqs-modal-overlay" @click.self="closeTaskModal">
+      <div class="glass rounded-2xl p-6 sm:p-8 w-full max-w-xl scale-in dqs-modal-card">
         <div class="flex items-start justify-between gap-4 mb-6">
           <div>
-            <h2 class="text-xl font-bold">Connect Playit</h2>
+            <h2 class="text-xl font-bold">{{ editingTaskId ? 'Edit Task' : 'New Task' }}</h2>
             <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Open Playit's setup page, copy the one-time code, and paste it here.
+              Run server actions automatically in a set schedule.
             </p>
           </div>
-          <button @click="closePlayitConnectModal" :disabled="playitBusy" class="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-xl transition disabled:opacity-50">
+          <button @click="closeTaskModal" class="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-xl transition">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
             </svg>
           </button>
         </div>
 
-        <div class="space-y-4">
-          <a :href="playitStatus.setup_url" target="_blank" rel="noopener noreferrer" class="btn-primary w-full text-center">
-            Open Setup Page
-          </a>
+        <form @submit.prevent="saveTask" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Task Name</label>
+            <input v-model="taskForm.name" type="text" placeholder="Nightly backup" class="input-field" />
+          </div>
 
           <div>
-            <label class="block text-sm text-gray-600 dark:text-gray-400 mb-2">Setup code from Playit</label>
-            <input
-              v-model="playitSetupCode"
-              type="text"
-              placeholder="Paste your setup code"
-              class="input-field font-mono uppercase"
-              :disabled="playitBusy"
-            />
+            <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Schedule Type</label>
+            <select v-model="taskForm.schedule_mode" class="input-field">
+              <option value="interval">Repeat every X minutes</option>
+              <option value="specific_time">Run at a specific time</option>
+            </select>
           </div>
 
-          <button
-            @click="connectPlayit"
-            :disabled="playitBusy || !playitSetupCode.trim()"
-            class="btn-success w-full disabled:opacity-50 flex items-center justify-center gap-3"
-          >
-            <span
-              v-if="playitBusy"
-              class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"
-            ></span>
-            <span>{{ playitBusy ? 'Creating tunnel...' : 'Connect' }}</span>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Action</label>
+              <select v-model="taskForm.action" class="input-field">
+                <option v-for="option in taskActionOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+            </div>
+            <div v-if="taskForm.schedule_mode === 'interval'">
+              <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Every</label>
+              <select v-model.number="taskForm.interval_minutes" class="input-field">
+                <option :value="5">5 minutes</option>
+                <option :value="15">15 minutes</option>
+                <option :value="30">30 minutes</option>
+                <option :value="60">1 hour</option>
+                <option :value="180">3 hours</option>
+                <option :value="360">6 hours</option>
+                <option :value="720">12 hours</option>
+                <option :value="1440">24 hours</option>
+              </select>
+            </div>
+            <div v-else>
+              <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Time</label>
+              <input v-model="taskForm.run_time" type="time" class="input-field" />
+            </div>
+          </div>
+
+          <div v-if="taskForm.schedule_mode === 'specific_time'">
+            <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Days</label>
+            <div class="grid grid-cols-4 sm:grid-cols-7 gap-2">
+              <button
+                v-for="day in taskDayOptions"
+                :key="day.value"
+                type="button"
+                @click="toggleTaskRunDay(day.value)"
+                :class="taskForm.run_days.includes(day.value)
+                  ? 'bg-mc-accent text-white border-mc-accent'
+                  : 'bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10'"
+                class="rounded-xl border px-3 py-2 text-sm font-medium transition"
+              >
+                {{ day.label }}
+              </button>
+            </div>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              Specific times use the panel machine's local time.
+            </p>
+          </div>
+
+          <div v-if="taskForm.action === 'command'">
+            <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Console Command</label>
+            <input v-model="taskForm.command" type="text" placeholder="say Server restart in 5 minutes" class="input-field font-mono" />
+          </div>
+
+          <label class="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-black/10 px-4 py-4 flex items-center justify-between gap-4">
+            <div>
+              <div class="font-medium">Enabled</div>
+              <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Disabled tasks stay saved but stop running until you turn them back on.
+              </p>
+            </div>
+            <span class="relative inline-flex items-center flex-shrink-0">
+              <input type="checkbox" class="sr-only peer" v-model="taskForm.enabled" />
+              <div class="w-10 h-5 bg-gray-300 dark:bg-gray-600 rounded-full peer peer-checked:bg-emerald-500 transition"></div>
+              <div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full peer-checked:translate-x-5 transition-transform"></div>
+            </span>
+          </label>
+
+          <div class="flex gap-3 pt-2">
+            <button type="button" @click="closeTaskModal" class="flex-1 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 py-3 rounded-xl transition">
+              Cancel
+            </button>
+            <button type="submit" :disabled="taskSaving" class="flex-1 btn-primary disabled:opacity-50">
+              {{ taskSaving ? 'Saving...' : (editingTaskId ? 'Save Task' : 'Create Task') }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </transition>
+
+  <transition name="modal">
+    <div v-if="showPlayitNeedsServerModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[999] p-4 dqs-modal-overlay" @click.self="showPlayitNeedsServerModal = false">
+      <div class="glass rounded-2xl p-6 sm:p-8 w-full max-w-md scale-in dqs-modal-card">
+        <div class="flex items-start gap-4">
+          <div class="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center text-amber-700 dark:text-amber-300 flex-shrink-0">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 4h.01M10.29 3.86l-7.12 12.3A1 1 0 004.03 18h15.94a1 1 0 00.86-1.84l-7.12-12.3a1 1 0 00-1.72 0z" />
+            </svg>
+          </div>
+          <div class="flex-1">
+            <h2 class="text-xl font-bold">Start the Server First</h2>
+            <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
+              Playit can only be claimed while this server is running. Start the server first, then come back here and click the Playit button again.
+            </p>
+          </div>
+        </div>
+        <div class="mt-6 flex justify-end">
+          <button type="button" @click="showPlayitNeedsServerModal = false" class="btn-primary px-5 py-2.5">
+            Okay
           </button>
-
-          <div class="rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-black/20 px-4 py-3">
-            <p class="text-sm text-gray-700 dark:text-gray-200">{{ playitConnectMessage }}</p>
-          </div>
-
-          <div v-if="playitStatus.saved_domain" class="rounded-xl border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 p-4">
-            <p class="text-xs uppercase tracking-wide text-emerald-700 dark:text-emerald-300 mb-1">Tunnel ready</p>
-            <p class="font-mono text-sm break-all">{{ playitStatus.saved_domain }}</p>
-          </div>
         </div>
       </div>
     </div>
@@ -990,32 +1342,130 @@
   <!-- File editor modal — teleported to body to escape stacking contexts -->
   <Teleport to="body">
     <transition name="modal">
-      <div v-if="showEditor" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 dqs-modal-overlay" @click.self="showEditor = false">
+      <div v-if="showEditor" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 dqs-modal-overlay" @click.self="requestCloseEditor">
         <div class="glass rounded-2xl w-full max-w-4xl flex flex-col max-h-[80vh] scale-in dqs-modal-card">
           <div class="flex justify-between items-center p-4 border-b border-gray-200 dark:border-white/5">
-            <h3 class="font-semibold">{{ editingFile }}</h3>
-            <button @click="showEditor = false" class="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-xl transition">
+            <div>
+              <h3 class="font-semibold break-all">{{ editingFile }}</h3>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Editable text files only • {{ formatSize(fileReadSize) }}</p>
+            </div>
+            <button @click="requestCloseEditor" class="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-xl transition">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
               </svg>
             </button>
           </div>
           <textarea v-model="fileContent" class="flex-1 bg-gray-50 dark:bg-black/50 p-4 font-mono text-sm text-gray-900 dark:text-white resize-none focus:outline-none min-h-[300px]"></textarea>
-          <div class="p-4 border-t border-gray-200 dark:border-white/5 flex justify-end gap-2">
-            <button @click="showEditor = false" class="bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 px-4 py-2 rounded-xl transition">Cancel</button>
-            <button @click="saveFile" class="btn-primary">Save</button>
+          <div class="p-4 border-t border-gray-200 dark:border-white/5 flex items-center justify-between gap-3">
+            <span class="text-xs text-gray-500 dark:text-gray-400">{{ editorIsDirty ? 'Unsaved changes' : 'No unsaved changes' }}</span>
+            <div class="flex justify-end gap-2">
+              <button @click="requestCloseEditor" class="bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 px-4 py-2 rounded-xl transition">Cancel</button>
+              <button @click="saveFile" class="btn-primary">Save</button>
+            </div>
           </div>
         </div>
       </div>
     </transition>
   </Teleport>
 
+  <transition name="modal">
+    <div v-if="showFileSearchModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[999] p-4 dqs-modal-overlay" @click.self="showFileSearchModal = false">
+      <div class="glass rounded-2xl w-full max-w-4xl flex flex-col max-h-[80vh] scale-in dqs-modal-card">
+        <div class="flex justify-between items-center p-4 border-b border-gray-200 dark:border-white/5">
+          <div>
+            <h3 class="font-semibold">File Search Results</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+              {{ fileSearchResults.length }} result{{ fileSearchResults.length === 1 ? '' : 's' }} for "{{ fileSearchQuery }}"
+              <span v-if="fileSearchWasTruncated">(limited to {{ fileLimits.search_max_results }})</span>
+            </p>
+          </div>
+          <button @click="showFileSearchModal = false" class="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-xl transition">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4 space-y-3">
+          <div v-if="fileSearchResults.length === 0" class="text-center text-gray-500 dark:text-gray-500 py-12">
+            No files matched this search.
+          </div>
+          <div v-else class="space-y-2">
+            <div v-for="result in fileSearchResults" :key="result.path" class="rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 p-4 flex items-center justify-between gap-4">
+              <div class="min-w-0">
+                <p class="font-medium break-all">{{ result.name }}</p>
+                <p class="text-sm text-gray-500 dark:text-gray-400 break-all">{{ result.path }}</p>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <button @click="openSearchResult(result)" class="btn-primary text-sm py-2">Open</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <transition name="modal">
+    <div v-if="showRenameModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[999] p-4 dqs-modal-overlay" @click.self="showRenameModal = false">
+      <div class="glass rounded-2xl p-6 w-full max-w-md scale-in dqs-modal-card">
+        <h3 class="text-xl font-bold mb-2">Rename</h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4 break-all">{{ renameForm.path }}</p>
+        <input v-model="renameForm.newName" type="text" class="input-field mb-4" placeholder="New name" @keyup.enter="saveRename" />
+        <div class="flex gap-2">
+          <button @click="showRenameModal = false" class="flex-1 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 py-3 rounded-xl transition">Cancel</button>
+          <button @click="saveRename" class="flex-1 btn-primary">Rename</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <transition name="modal">
+    <div v-if="showCreateFolderModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[999] p-4 dqs-modal-overlay" @click.self="showCreateFolderModal = false">
+      <div class="glass rounded-2xl p-6 w-full max-w-md scale-in dqs-modal-card">
+        <h3 class="text-xl font-bold mb-2">New Folder</h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Create a new folder inside {{ currentPath || 'root' }}.</p>
+        <input v-model="createFolderForm.name" type="text" class="input-field mb-4" placeholder="Folder name" @keyup.enter="submitCreateFolder" />
+        <div class="flex gap-2">
+          <button @click="showCreateFolderModal = false" class="flex-1 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 py-3 rounded-xl transition">Cancel</button>
+          <button @click="submitCreateFolder" class="flex-1 btn-primary">Create</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <transition name="modal">
+    <div v-if="showArchiveModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[999] p-4 dqs-modal-overlay" @click.self="showArchiveModal = false">
+      <div class="glass rounded-2xl p-6 w-full max-w-lg scale-in dqs-modal-card">
+        <h3 class="text-xl font-bold mb-2">Archive Selected Files</h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">{{ selectedFiles.length }} item{{ selectedFiles.length === 1 ? '' : 's' }} will be zipped into the current folder.</p>
+        <input v-model="archiveForm.outputName" type="text" class="input-field mb-4" placeholder="archive-name.zip" @keyup.enter="createArchiveFromSelection" />
+        <div class="max-h-40 overflow-y-auto rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-black/10 p-3 space-y-2 mb-4">
+          <div v-for="item in selectedFiles" :key="item" class="text-sm break-all">{{ item }}</div>
+        </div>
+        <div class="flex gap-2">
+          <button @click="showArchiveModal = false" class="flex-1 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 py-3 rounded-xl transition">Cancel</button>
+          <button @click="createArchiveFromSelection" class="flex-1 btn-primary">Create Archive</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
   <!-- File upload modal — teleported to body to escape stacking contexts -->
   <Teleport to="body">
     <transition name="modal">
-      <div v-if="showUpload" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 dqs-modal-overlay" @click.self="showUpload = false">
-        <div class="glass rounded-2xl p-5 sm:p-8 w-full max-w-md scale-in dqs-modal-card">
-          <h3 class="text-xl font-bold mb-4">Upload</h3>
+      <div v-if="showUpload" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 dqs-modal-overlay" @click.self="!uploadInProgress && closeUploadModal()">
+        <div class="glass rounded-2xl p-5 sm:p-8 w-full max-w-2xl scale-in dqs-modal-card">
+          <div class="flex items-center justify-between gap-3 mb-4">
+            <div>
+              <h3 class="text-xl font-bold">Upload</h3>
+              <p class="text-sm text-gray-500 dark:text-gray-400">Queue files or folders and upload them with progress tracking.</p>
+            </div>
+            <button @click="closeUploadModal" :disabled="uploadInProgress" class="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-xl transition disabled:opacity-50">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
           <div class="flex gap-2 mb-4">
             <button @click="uploadMode = 'file'" :class="uploadMode === 'file' ? 'bg-mc-accent text-white' : 'bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400'"
               class="flex-1 py-2.5 rounded-xl transition">File</button>
@@ -1024,10 +1474,36 @@
           </div>
           <input v-if="uploadMode === 'file'" type="file" @change="handleFileUpload" class="mb-4" />
           <input v-if="uploadMode === 'folder'" type="file" webkitdirectory @change="handleFolderUpload" class="mb-4" />
-          <p v-if="uploadMode === 'folder' && uploadFiles.length > 0" class="text-sm text-gray-500 dark:text-gray-400 mb-4">{{ uploadFiles.length }} files selected</p>
+          <div class="rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-black/10 p-4 mb-4 text-sm">
+            <p>{{ uploadQueue.length }} item{{ uploadQueue.length === 1 ? '' : 's' }} queued • {{ formatSize(uploadTotalBytes) }}</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Each file must be under {{ formatSize(fileLimits.upload_limit_bytes) }}.</p>
+          </div>
+          <div v-if="uploadQueue.length > 0" class="rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-black/10 p-4 space-y-3 max-h-72 overflow-y-auto mb-4">
+            <div v-for="item in uploadQueue" :key="item.id" class="space-y-1">
+              <div class="flex items-center justify-between gap-3 text-sm">
+                <span class="break-all">{{ item.relativePath }}</span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">{{ item.status === 'queued' ? 'Waiting' : item.status === 'uploading' ? `${item.progress}%` : item.status === 'done' ? 'Done' : 'Failed' }}</span>
+              </div>
+              <div class="h-2 rounded-full bg-gray-200 dark:bg-white/10 overflow-hidden">
+                <div :class="item.status === 'error' ? 'bg-red-500' : 'bg-mc-accent'" class="h-full transition-all duration-200" :style="{ width: `${item.progress}%` }"></div>
+              </div>
+              <p v-if="item.error" class="text-xs text-red-500 dark:text-red-300 break-all">{{ item.error }}</p>
+            </div>
+          </div>
+          <div v-if="uploadInProgress" class="mb-4">
+            <div class="flex items-center justify-between text-sm mb-2">
+              <span>Overall progress</span>
+              <span>{{ uploadOverallProgress }}%</span>
+            </div>
+            <div class="h-2 rounded-full bg-gray-200 dark:bg-white/10 overflow-hidden">
+              <div class="h-full bg-emerald-500 transition-all duration-200" :style="{ width: `${uploadOverallProgress}%` }"></div>
+            </div>
+          </div>
           <div class="flex gap-2">
-            <button @click="showUpload = false" class="flex-1 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 py-3 rounded-xl transition">Cancel</button>
-            <button @click="uploadFile" class="flex-1 btn-primary">Upload</button>
+            <button @click="closeUploadModal" :disabled="uploadInProgress" class="flex-1 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 py-3 rounded-xl transition disabled:opacity-50">Cancel</button>
+            <button @click="uploadFile" :disabled="uploadInProgress || uploadQueue.length === 0" class="flex-1 btn-primary disabled:opacity-50">
+              {{ uploadInProgress ? `Uploading ${uploadCompletedCount}/${uploadQueue.length}` : 'Upload' }}
+            </button>
           </div>
         </div>
       </div>
@@ -1065,11 +1541,16 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick, inject, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import axios from 'axios'
+import { Terminal } from 'xterm'
+import { FitAddon } from '@xterm/addon-fit'
+import { WebLinksAddon } from '@xterm/addon-web-links'
+import 'xterm/css/xterm.css'
 
 const route = useRoute()
+const router = useRouter()
 const authStore = useAuthStore()
 const serverId = route.params.id
 const toast = inject('toast', (opts) => alert(opts.title + (opts.message ? ': ' + opts.message : '')))
@@ -1080,16 +1561,48 @@ const activeTab = ref('console')
 const consoleLines = ref([])
 const command = ref('')
 const consoleRef = ref(null)
+const consoleConnectionState = ref('idle')
+const consoleAutoScroll = ref(true)
 const files = ref([])
 const currentPath = ref('')
 const showEditor = ref(false)
 const showUpload = ref(false)
+const showFileSearchModal = ref(false)
+const showRenameModal = ref(false)
+const showCreateFolderModal = ref(false)
+const showArchiveModal = ref(false)
 const showEulaModal = ref(false)
 const acceptingEula = ref(false)
 const showSearchModal = ref(false)
+const serverMissing = ref(false)
+let missingServerRedirected = false
+
+const ANSI_ESCAPE_REGEX = /\u001b\[[0-?]*[ -/]*[@-~]/g
 const uploadMode = ref('file')
 const editingFile = ref('')
 const fileContent = ref('')
+const originalFileContent = ref('')
+const fileReadSize = ref(0)
+const fileSearchQuery = ref('')
+const searchingFiles = ref(false)
+const fileSearchResults = ref([])
+const fileSearchWasTruncated = ref(false)
+const fileLimits = reactive({
+  upload_limit_bytes: 100 * 1024 * 1024,
+  text_edit_limit_bytes: 2 * 1024 * 1024,
+  search_max_results: 200,
+})
+const renameForm = reactive({
+  path: '',
+  newName: '',
+})
+const createFolderForm = reactive({
+  name: '',
+})
+const archiveForm = reactive({
+  outputName: '',
+})
+const selectedFiles = ref([])
 const sftpEnabled = ref(false)
 const sftpStatus = ref('stopped')
 const sftpPassword = ref('')
@@ -1097,6 +1610,8 @@ const sftpHost = window.location.hostname || 'localhost'
 const sftpPort = ref(2223)
 const uploadFileRef = ref(null)
 const uploadFiles = ref([])
+const uploadQueue = ref([])
+const uploadInProgress = ref(false)
 const players = ref([])
 const pluginSearch = ref('')
 const pluginSearchLoading = ref(false)
@@ -1113,18 +1628,221 @@ const selectedPlugin = ref(null)
 const pluginVersions = ref([])
 const versionLoading = ref(false)
 const settings = ref({})
+const settingsSections = [
+  {
+    title: 'Core Gameplay',
+    description: 'The big server behavior choices people usually expect to change first.',
+    fields: [
+      {
+        key: 'motd',
+        label: 'MOTD',
+        description: 'The message shown in the multiplayer server list.',
+        type: 'text',
+        defaultValue: 'A Minecraft Server',
+        placeholder: 'A Minecraft Server',
+      },
+      {
+        key: 'difficulty',
+        label: 'Difficulty',
+        description: 'How punishing the world should be.',
+        type: 'select',
+        defaultValue: 'easy',
+        options: [
+          { value: 'peaceful', label: 'Peaceful' },
+          { value: 'easy', label: 'Easy' },
+          { value: 'normal', label: 'Normal' },
+          { value: 'hard', label: 'Hard' },
+        ],
+      },
+      {
+        key: 'gamemode',
+        label: 'Default Game Mode',
+        description: 'What players join into by default.',
+        type: 'select',
+        defaultValue: 'survival',
+        options: [
+          { value: 'survival', label: 'Survival' },
+          { value: 'creative', label: 'Creative' },
+          { value: 'adventure', label: 'Adventure' },
+          { value: 'spectator', label: 'Spectator' },
+        ],
+      },
+      {
+        key: 'max-players',
+        label: 'Max Players',
+        description: 'How many players can join at once.',
+        type: 'number',
+        defaultValue: '20',
+        min: 1,
+        max: 500,
+      },
+      {
+        key: 'pvp',
+        label: 'PVP',
+        description: 'Allow players to damage each other.',
+        type: 'boolean',
+        defaultValue: true,
+      },
+      {
+        key: 'hardcore',
+        label: 'Hardcore Mode',
+        description: 'Enable hardcore survival rules.',
+        type: 'boolean',
+        defaultValue: false,
+      },
+    ],
+  },
+  {
+    title: 'World Rules',
+    description: 'A few practical world and mob settings without needing to know the raw property names.',
+    fields: [
+      {
+        key: 'level-seed',
+        label: 'World Seed',
+        description: 'Leave blank to let Minecraft generate one.',
+        type: 'text',
+        defaultValue: '',
+        placeholder: 'Optional seed',
+      },
+      {
+        key: 'level-type',
+        label: 'World Type',
+        description: 'Choose the base terrain style for a new world.',
+        type: 'select',
+        defaultValue: 'minecraft:normal',
+        options: [
+          { value: 'minecraft:normal', label: 'Normal' },
+          { value: 'minecraft:flat', label: 'Flat' },
+          { value: 'minecraft:large_biomes', label: 'Large Biomes' },
+          { value: 'minecraft:amplified', label: 'Amplified' },
+        ],
+      },
+      {
+        key: 'spawn-monsters',
+        label: 'Hostile Mobs',
+        description: 'Controls whether monsters can naturally spawn.',
+        type: 'boolean',
+        defaultValue: true,
+      },
+      {
+        key: 'spawn-animals',
+        label: 'Passive Animals',
+        description: 'Controls whether passive mobs can naturally spawn.',
+        type: 'boolean',
+        defaultValue: true,
+      },
+      {
+        key: 'generate-structures',
+        label: 'Generate Structures',
+        description: 'Villages, temples, strongholds, and other structures.',
+        type: 'boolean',
+        defaultValue: true,
+      },
+      {
+        key: 'allow-nether',
+        label: 'Allow Nether',
+        description: 'Lets players travel to the Nether.',
+        type: 'boolean',
+        defaultValue: true,
+      },
+    ],
+  },
+  {
+    title: 'Access & Performance',
+    description: 'Connection, visibility, and simulation settings that matter for real players.',
+    fields: [
+      {
+        key: 'online-mode',
+        label: 'Online Mode',
+        description: 'Verify players with Mojang before they join.',
+        type: 'boolean',
+        defaultValue: true,
+      },
+      {
+        key: 'white-list',
+        label: 'Whitelist',
+        description: 'Only allow approved players to join.',
+        type: 'boolean',
+        defaultValue: false,
+      },
+      {
+        key: 'allow-flight',
+        label: 'Allow Flight',
+        description: 'Useful for modded or admin-heavy servers.',
+        type: 'boolean',
+        defaultValue: false,
+      },
+      {
+        key: 'enable-command-block',
+        label: 'Command Blocks',
+        description: 'Enable command block usage.',
+        type: 'boolean',
+        defaultValue: false,
+      },
+      {
+        key: 'view-distance',
+        label: 'View Distance',
+        description: 'How far chunks are sent to players.',
+        type: 'number',
+        defaultValue: '10',
+        min: 2,
+        max: 32,
+      },
+      {
+        key: 'simulation-distance',
+        label: 'Simulation Distance',
+        description: 'How far the world keeps ticking around players.',
+        type: 'number',
+        defaultValue: '10',
+        min: 2,
+        max: 32,
+      },
+    ],
+  },
+]
+const knownSettingsKeys = new Set(settingsSections.flatMap((section) => section.fields.map((field) => field.key)))
 const resources = reactive({ ram_min: 512, ram_max: 1024, cpu_cores: 1, custom_launch_command: '' })
 const backups = ref([])
 const backupLoading = ref(false)
+const tasks = ref([])
+const tasksLoading = ref(false)
+const taskSaving = ref(false)
+const editingTaskId = ref(null)
+const runningTaskId = ref(null)
+const deletingTaskId = ref(null)
+const showTaskModal = ref(false)
+const taskActionOptions = [
+  { value: 'backup', label: 'Create Backup' },
+  { value: 'restart', label: 'Restart Server' },
+  { value: 'start', label: 'Start Server' },
+  { value: 'stop', label: 'Stop Server' },
+  { value: 'command', label: 'Send Command' },
+]
+const taskDayOptions = [
+  { value: 0, label: 'Mon' },
+  { value: 1, label: 'Tue' },
+  { value: 2, label: 'Wed' },
+  { value: 3, label: 'Thu' },
+  { value: 4, label: 'Fri' },
+  { value: 5, label: 'Sat' },
+  { value: 6, label: 'Sun' },
+]
+const taskForm = reactive({
+  name: '',
+  action: 'backup',
+  schedule_mode: 'interval',
+  interval_minutes: 60,
+  run_time: '03:00',
+  run_days: [0, 1, 2, 3, 4, 5, 6],
+  enabled: true,
+  command: '',
+})
 const autoBackupEnabled = ref(localStorage.getItem(`autoBackup_${serverId}`) === 'true')
 const autoBackupInterval = ref(localStorage.getItem(`autoBackupInterval_${serverId}`) || '21600000')
 const autoBackupTimer = ref(null)
 const nextBackupTime = ref('')
-const playitApiBase = import.meta.env.VITE_PLAYIT_PROXY_URL || 'https://vercel-playit-api.vercel.app/api/playit'
 const playitBusy = ref(false)
-const showPlayitConnectModal = ref(false)
-const playitConnectMessage = ref('Paste your one-time Playit setup code to connect this server.')
-const playitSetupCode = ref('')
+const showPlayitNeedsServerModal = ref(false)
 const playitStatus = ref({
   partner_configured: false,
   setup_url: 'https://playit.gg/l/setup-third-party',
@@ -1157,6 +1875,8 @@ const networkStats = ref({
     bandwidth_total_bps: [],
   },
 })
+const commandHistory = ref([])
+const commandHistoryIndex = ref(-1)
 
 function buildChartPoints(values) {
   const series = Array.isArray(values) ? values : []
@@ -1178,45 +1898,44 @@ function buildChartPoints(values) {
 
 const playersChartPoints = computed(() => buildChartPoints(networkStats.value.history.players))
 const bandwidthChartPoints = computed(() => buildChartPoints(networkStats.value.history.bandwidth_total_bps))
+const consoleStatusLabel = computed(() => {
+  if (consoleConnectionState.value === 'connected') return 'Live console connected'
+  if (consoleConnectionState.value === 'connecting') return 'Connecting console'
+  if (server.value?.status === 'running') return 'Console waiting to reconnect'
+  return 'Server offline'
+})
+const consoleStatusBadgeClass = computed(() => {
+  if (consoleConnectionState.value === 'connected') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300'
+  if (consoleConnectionState.value === 'connecting') return 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300'
+  if (server.value?.status === 'running') return 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300'
+  return 'border-gray-300 bg-gray-100 text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-300'
+})
+const otherSettingsEntries = computed(() =>
+  Object.entries(settings.value || {})
+    .filter(([key]) => !knownSettingsKeys.has(key))
+    .sort(([a], [b]) => a.localeCompare(b))
+)
 
-function getPlayitLinkStorageKey() {
-  const username = authStore.user?.username || 'guest'
-  const createdAt = server.value?.created_at || 'unknown'
-  return `enderpanel_playit_link_${playitApiBase}_${username}_${serverId}_${createdAt}`
+function getSettingValue(key, fallback = '') {
+  const value = settings.value?.[key]
+  if (value === undefined || value === null || value === '') return String(fallback ?? '')
+  return String(value)
 }
 
-function buildStoredPlayitLink(data) {
-  return {
-    linked: true,
-    agent_id: data.agent_id || null,
-    agent_secret_masked: data.agent_secret_masked || null,
-    account_id: data.account_id || null,
-    saved_domain: data.saved_domain || '',
-    setup_url: data.setup_url || playitStatus.value.setup_url,
-    dashboard_url: data.dashboard_url || playitStatus.value.dashboard_url,
-    recommended_local_port: data.recommended_local_port || playitStatus.value.recommended_local_port,
-    saved_tunnel_id: data.saved_tunnel_id || null,
-    tunnel_created: Boolean(data.tunnel_created),
-    tunnel_create_detail: data.tunnel_create_detail || null,
-    partner_configured: data.partner_configured !== false,
+function setSettingValue(key, value) {
+  settings.value = {
+    ...settings.value,
+    [key]: String(value ?? ''),
   }
 }
 
-function saveStoredPlayitLink(data) {
-  localStorage.setItem(getPlayitLinkStorageKey(), JSON.stringify(buildStoredPlayitLink(data)))
+function isBooleanSettingEnabled(key, fallback = false) {
+  const raw = String(settings.value?.[key] ?? String(Boolean(fallback))).toLowerCase()
+  return raw === 'true' || raw === '1' || raw === 'yes'
 }
 
-function loadStoredPlayitLink() {
-  try {
-    const raw = localStorage.getItem(getPlayitLinkStorageKey())
-    return raw ? JSON.parse(raw) : null
-  } catch {
-    return null
-  }
-}
-
-function clearStoredPlayitLink() {
-  localStorage.removeItem(getPlayitLinkStorageKey())
+function setBooleanSetting(key, enabled) {
+  setSettingValue(key, enabled ? 'true' : 'false')
 }
 
 function getConsoleHistoryStorageKey() {
@@ -1229,7 +1948,6 @@ function saveConsoleHistory() {
   try {
     const payload = {
       lines: consoleLines.value.slice(-400),
-      lastLine: lastConsoleLine,
       startedAt: lastConsoleStartedAt,
       updatedAt: Date.now(),
     }
@@ -1245,7 +1963,6 @@ function loadConsoleHistory() {
     const lines = Array.isArray(parsed?.lines) ? parsed.lines.filter((line) => typeof line === 'string' && line.trim() !== '') : []
     if (!lines.length) return false
     consoleLines.value = lines.slice(-400)
-    lastConsoleLine = typeof parsed?.lastLine === 'string' ? parsed.lastLine : (consoleLines.value[consoleLines.value.length - 1] || '')
     lastConsoleStartedAt = typeof parsed?.startedAt === 'string' ? parsed.startedAt : ''
     return true
   } catch {
@@ -1256,91 +1973,160 @@ function loadConsoleHistory() {
 function clearConsoleHistory() {
   consoleLines.value = []
   consoleLineBuffer = ''
-  hasLoadedConsoleHistory = false
-  lastConsoleLine = ''
   lastConsoleStartedAt = ''
+  renderConsoleHistory()
   try {
     localStorage.removeItem(getConsoleHistoryStorageKey())
   } catch {}
 }
 
-let ws = null
+let consoleStream = null
 let reconnectTimeout = null
-let consoleRefreshTimeout = null
+let filesRefreshTimeout = null
 let shouldKeepConsoleConnected = false
-let reconnectAttempts = 0
 let consoleLineBuffer = ''
-let hasLoadedConsoleHistory = false
-let lastConsoleLine = ''
 let lastConsoleStartedAt = ''
-let consoleRefreshInFlight = false
-let consoleStartupBoostUntil = 0
+let filesRequestId = 0
+let terminal = null
+let terminalFitAddon = null
+let terminalResizeObserver = null
 
-function stopConsoleRefreshLoop() {
-  if (consoleRefreshTimeout) {
-    clearTimeout(consoleRefreshTimeout)
-    consoleRefreshTimeout = null
+function hasActiveConsoleStream() {
+  return Boolean(consoleStream && (consoleStream.readyState === WebSocket.OPEN || consoleStream.readyState === WebSocket.CONNECTING))
+}
+
+function stopFilesRefreshLoop() {
+  if (filesRefreshTimeout) {
+    clearTimeout(filesRefreshTimeout)
+    filesRefreshTimeout = null
   }
 }
 
-function getConsoleRefreshDelay() {
-  return Date.now() < consoleStartupBoostUntil ? 500 : 1000
-}
-
-function bumpConsoleStartupBoost(ms = 10000) {
-  consoleStartupBoostUntil = Date.now() + ms
-}
-
-function startConsoleRefreshLoop() {
-  stopConsoleRefreshLoop()
+function startFilesRefreshLoop() {
+  stopFilesRefreshLoop()
   const tick = async () => {
-    if (!shouldKeepConsoleConnected || activeTab.value !== 'console') {
-      consoleRefreshTimeout = null
+    if (activeTab.value !== 'files') {
+      filesRefreshTimeout = null
       return
     }
-
-    if (!consoleRefreshInFlight) {
-      consoleRefreshInFlight = true
-      try {
-        const socketOpen = ws && ws.readyState === WebSocket.OPEN
-        if (server.value?.status === 'running') {
-          if (!socketOpen) {
-            connectWebSocket({ replay: true })
-            await fetchRecentConsoleLogs()
-          } else if (Date.now() < consoleStartupBoostUntil && consoleLines.value.length === 0) {
-            await fetchRecentConsoleLogs()
-          }
-        } else {
-          await fetchRecentConsoleLogs()
-        }
-      } finally {
-        consoleRefreshInFlight = false
-      }
+    if (typeof document !== 'undefined' && document.hidden) {
+      filesRefreshTimeout = setTimeout(() => {
+        void tick()
+      }, 4000)
+      return
     }
-
-    consoleRefreshTimeout = setTimeout(() => {
+    await navigateTo(currentPath.value, { silent: true })
+    filesRefreshTimeout = setTimeout(() => {
       void tick()
-    }, getConsoleRefreshDelay())
+    }, 2000)
   }
+  filesRefreshTimeout = setTimeout(() => {
+    void tick()
+  }, 2000)
+}
 
-  void tick()
+function fitConsoleTerminal() {
+  if (!terminalFitAddon) return
+  requestAnimationFrame(() => {
+    try {
+      terminalFitAddon.fit()
+      if (consoleAutoScroll.value && terminal) {
+        terminal.scrollToBottom()
+      }
+    } catch {}
+  })
+}
+
+function renderConsoleHistory() {
+  if (!terminal) return
+  terminal.reset()
+  if (consoleLines.value.length) {
+    terminal.write(`${consoleLines.value.join('\r\n')}\r\n`)
+  }
+  if (consoleAutoScroll.value) {
+    terminal.scrollToBottom()
+  }
+}
+
+function initializeConsoleTerminal() {
+  if (terminal || !consoleRef.value) return
+
+  terminal = new Terminal({
+    fontFamily: `'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`,
+    fontSize: 13,
+    lineHeight: 1.15,
+    cursorBlink: true,
+    cursorStyle: 'underline',
+    allowTransparency: true,
+    convertEol: true,
+    disableStdin: true,
+    theme: {
+      background: '#050816',
+      foreground: '#d1fae5',
+      cursor: '#5eead4',
+      selectionBackground: 'rgba(45, 212, 191, 0.25)',
+      black: '#0b1120',
+      red: '#f87171',
+      green: '#4ade80',
+      yellow: '#fbbf24',
+      blue: '#60a5fa',
+      magenta: '#c084fc',
+      cyan: '#22d3ee',
+      white: '#e5e7eb',
+      brightBlack: '#475569',
+      brightRed: '#fca5a5',
+      brightGreen: '#86efac',
+      brightYellow: '#fde68a',
+      brightBlue: '#93c5fd',
+      brightMagenta: '#d8b4fe',
+      brightCyan: '#67e8f9',
+      brightWhite: '#f8fafc',
+    },
+  })
+
+  terminalFitAddon = new FitAddon()
+  terminal.loadAddon(terminalFitAddon)
+  terminal.loadAddon(new WebLinksAddon())
+  terminal.open(consoleRef.value)
+  terminal.onScroll(() => {
+    if (!terminal) return
+    consoleAutoScroll.value = terminal.buffer.active.viewportY >= terminal.buffer.active.baseY
+  })
+  renderConsoleHistory()
+  fitConsoleTerminal()
+
+  if (typeof ResizeObserver !== 'undefined') {
+    terminalResizeObserver = new ResizeObserver(() => fitConsoleTerminal())
+    terminalResizeObserver.observe(consoleRef.value)
+  }
+  window.addEventListener('resize', fitConsoleTerminal)
 }
 
 watch(activeTab, (newTab) => {
   if (newTab === 'files') {
     navigateTo(currentPath.value)
+    startFilesRefreshLoop()
+  }
+  if (newTab === 'playit') {
+    void fetchPlayitStatus()
   }
   if (newTab === 'console') {
+    nextTick(() => initializeConsoleTerminal())
     shouldKeepConsoleConnected = true
-    startConsoleRefreshLoop()
-    void fetchRecentConsoleLogs()
-    if (server.value?.status === 'running' && (!ws || ws.readyState === WebSocket.CLOSED)) {
-      connectWebSocket({ replay: true })
+    if (server.value?.status === 'running' && !hasActiveConsoleStream()) {
+      connectConsoleStream({ replay: !consoleLines.value.length })
+    } else {
+      void fetchRecentConsoleLogs()
     }
   } else {
     shouldKeepConsoleConnected = false
-    stopConsoleRefreshLoop()
-    disconnectWebSocket()
+    disconnectConsoleStream()
+  }
+  if (newTab === 'tasks') {
+    void fetchTasks()
+  }
+  if (newTab !== 'files') {
+    stopFilesRefreshLoop()
   }
 })
 
@@ -1349,6 +2135,21 @@ const modLabel = computed(() => {
   if (type === 'paper' || type === 'spigot' || type === 'bukkit') return 'Plugins'
   return 'Mods'
 })
+
+const currentPathParts = computed(() => currentPath.value.split('/').filter(Boolean))
+const hasSelectedFiles = computed(() => selectedFiles.value.length > 0)
+const uploadTotalBytes = computed(() => uploadQueue.value.reduce((total, item) => total + (item.size || 0), 0))
+const uploadCompletedCount = computed(() => uploadQueue.value.filter((item) => item.status === 'done').length)
+const uploadFailedCount = computed(() => uploadQueue.value.filter((item) => item.status === 'error').length)
+const uploadOverallProgress = computed(() => {
+  if (!uploadQueue.value.length) return 0
+  const completedBytes = uploadQueue.value.reduce((total, item) => {
+    const ratio = item.status === 'done' ? 1 : Math.min(Math.max(item.progress || 0, 0), 100) / 100
+    return total + Math.round((item.size || 0) * ratio)
+  }, 0)
+  return Math.min(Math.round((completedBytes / Math.max(uploadTotalBytes.value, 1)) * 100), 100)
+})
+const editorIsDirty = computed(() => showEditor.value && fileContent.value !== originalFileContent.value)
 
 const tabs = computed(() => {
   const type = server.value?.server_type?.toLowerCase()
@@ -1365,6 +2166,7 @@ const tabs = computed(() => {
     { id: 'network', name: 'Network' },
     { id: 'playit', name: 'Playit' },
     { id: 'backups', name: 'Backups' },
+    { id: 'tasks', name: 'Tasks' },
     { id: 'settings', name: 'Settings' },
   )
   return list
@@ -1372,6 +2174,7 @@ const tabs = computed(() => {
 
 function switchTab(tabId) {
   activeTab.value = tabId
+  updatePlayitClaimPolling()
   if (tabId === 'files') {
     nextTick(() => navigateTo(currentPath.value))
   } else if (tabId === 'backups') {
@@ -1380,14 +2183,46 @@ function switchTab(tabId) {
     nextTick(() => fetchPlayers())
   } else if (tabId === 'network') {
     nextTick(() => fetchNetworkStats())
+  } else if (tabId === 'playit') {
+    nextTick(() => fetchPlayitStatus())
+  }
+}
+
+function shouldPollPlayitClaim() {
+  return (
+    activeTab.value === 'playit' &&
+    !!playitStatus.value.enabled &&
+    !!playitStatus.value.server_running &&
+    !playitStatus.value.linked &&
+    !!playitStatus.value.claim_url
+  )
+}
+
+let playitClaimPollInterval = null
+let playitClaimPollInFlight = false
+
+function updatePlayitClaimPolling() {
+  if (playitClaimPollInterval && !shouldPollPlayitClaim()) {
+    clearInterval(playitClaimPollInterval)
+    playitClaimPollInterval = null
+  }
+
+  if (!playitClaimPollInterval && shouldPollPlayitClaim()) {
+    playitClaimPollInterval = setInterval(async () => {
+      if (playitClaimPollInFlight || playitBusy.value) return
+      playitClaimPollInFlight = true
+      try {
+        await syncPlayitStatus()
+      } finally {
+        playitClaimPollInFlight = false
+      }
+    }, 1500)
   }
 }
 
 function appendConsoleLine(line) {
   const normalized = String(line || '').trimEnd()
   if (!normalized) return
-  if (normalized === lastConsoleLine) return
-  lastConsoleLine = normalized
   consoleLines.value.push(normalized)
 }
 
@@ -1397,43 +2232,21 @@ function finalizeConsoleLines() {
   }
 
   saveConsoleHistory()
-
-  nextTick(() => {
-    if (consoleRef.value) consoleRef.value.scrollTop = consoleRef.value.scrollHeight
-  })
+  if (consoleAutoScroll.value && terminal) {
+    terminal.scrollToBottom()
+  }
 }
 
-function mergeConsoleReplayLines(lines) {
+function replaceConsoleLines(lines) {
   const incoming = Array.isArray(lines)
     ? lines
         .map((line) => String(line || '').trimEnd())
         .filter((line) => line)
     : []
 
-  if (!incoming.length) return
-
-  const existing = consoleLines.value
-  const maxOverlap = Math.min(existing.length, incoming.length)
-  let overlap = 0
-
-  for (let size = maxOverlap; size > 0; size -= 1) {
-    let matches = true
-    for (let index = 0; index < size; index += 1) {
-      if (existing[existing.length - size + index] !== incoming[index]) {
-        matches = false
-        break
-      }
-    }
-    if (matches) {
-      overlap = size
-      break
-    }
-  }
-
-  for (const line of incoming.slice(overlap)) {
-    appendConsoleLine(line)
-  }
-
+  consoleLines.value = incoming.slice(-400)
+  consoleLineBuffer = ''
+  renderConsoleHistory()
   finalizeConsoleLines()
 }
 
@@ -1454,14 +2267,13 @@ async function fetchRecentConsoleLogs() {
     if (startedAt && startedAt !== lastConsoleStartedAt) {
       consoleLines.value = []
       consoleLineBuffer = ''
-      lastConsoleLine = ''
       lastConsoleStartedAt = startedAt
       saveConsoleHistory()
     } else if (startedAt && !lastConsoleStartedAt) {
       lastConsoleStartedAt = startedAt
     }
 
-    mergeConsoleReplayLines(lines)
+    replaceConsoleLines(lines)
   } catch (e) {
     console.error('Failed to fetch recent console logs:', e)
   }
@@ -1470,6 +2282,13 @@ async function fetchRecentConsoleLogs() {
 function appendConsoleChunk(chunk) {
   const normalized = String(chunk || '').replace(/\r/g, '')
   if (!normalized) return
+
+  if (terminal) {
+    terminal.write(normalized.replace(/\n/g, '\r\n'))
+    if (consoleAutoScroll.value) {
+      terminal.scrollToBottom()
+    }
+  }
 
   consoleLineBuffer += normalized
   const parts = consoleLineBuffer.split('\n')
@@ -1482,14 +2301,88 @@ function appendConsoleChunk(chunk) {
   finalizeConsoleLines()
 }
 
+function rememberConsoleCommand(value) {
+  const next = String(value || '').trim()
+  if (!next) return
+  commandHistory.value = [next, ...commandHistory.value.filter((entry) => entry !== next)].slice(0, 50)
+  commandHistoryIndex.value = -1
+}
+
+function recallPreviousCommand() {
+  if (!commandHistory.value.length) return
+  commandHistoryIndex.value = Math.min(commandHistoryIndex.value + 1, commandHistory.value.length - 1)
+  command.value = commandHistory.value[commandHistoryIndex.value] || ''
+}
+
+function recallNextCommand() {
+  if (!commandHistory.value.length) return
+  commandHistoryIndex.value = Math.max(commandHistoryIndex.value - 1, -1)
+  command.value = commandHistoryIndex.value >= 0 ? (commandHistory.value[commandHistoryIndex.value] || '') : ''
+}
+
+function toggleConsoleAutoScroll() {
+  consoleAutoScroll.value = !consoleAutoScroll.value
+  if (consoleAutoScroll.value && terminal) {
+    terminal.scrollToBottom()
+  }
+}
+
+async function copyConsoleOutput() {
+  try {
+    await navigator.clipboard.writeText(
+      consoleLines.value
+        .map((line) => String(line || '').replace(ANSI_ESCAPE_REGEX, ''))
+        .join('\n')
+    )
+    toast({ type: 'success', title: 'Copied', message: 'Console output copied to clipboard' })
+  } catch {
+    toast({ type: 'error', title: 'Copy Failed', message: 'Could not copy console output' })
+  }
+}
+
+async function copyPlayitAddress() {
+  if (!playitStatus.value.saved_domain) return
+  try {
+    await navigator.clipboard.writeText(String(playitStatus.value.saved_domain))
+    toast({ type: 'success', title: 'Copied', message: 'Playit address copied to clipboard' })
+  } catch {
+    toast({ type: 'error', title: 'Copy Failed', message: 'Could not copy the Playit address' })
+  }
+}
+
 function setPreset(min, max) {
   resources.ram_min = min
   resources.ram_max = max
 }
 
+function isServerMissingError(error) {
+  return Number(error?.response?.status) === 404
+}
+
+function handleServerMissing() {
+  if (serverMissing.value) return
+  serverMissing.value = true
+  stopFilesRefreshLoop()
+  disconnectConsoleStream()
+  if (statusInterval) {
+    clearInterval(statusInterval)
+    statusInterval = null
+  }
+  if (playitClaimPollInterval) {
+    clearInterval(playitClaimPollInterval)
+    playitClaimPollInterval = null
+  }
+  if (!missingServerRedirected) {
+    missingServerRedirected = true
+    toast({ type: 'warning', title: 'Server Removed', message: 'This server no longer exists.' })
+    router.replace('/dashboard')
+  }
+}
+
 async function fetchServer() {
   try {
     const res = await axios.get(`/api/servers/${serverId}`)
+    serverMissing.value = false
     server.value = res.data
     resources.ram_min = res.data.ram_min
     resources.ram_max = res.data.ram_max
@@ -1498,8 +2391,14 @@ async function fetchServer() {
     playitStatus.value.server_running = res.data.status === 'running'
     playitStatus.value.enabled = !!res.data.playit_enabled
     playitStatus.value.recommended_local_port = res.data.port || playitStatus.value.recommended_local_port
+    return true
   } catch (e) {
+    if (isServerMissingError(e)) {
+      handleServerMissing()
+      return false
+    }
     console.error('Failed to fetch server:', e)
+    return false
   }
 }
 
@@ -1542,264 +2441,105 @@ function applyPlayitStatus(data) {
     ...playitStatus.value,
     ...data,
   }
-}
-
-function openPlayitConnectModal() {
-  playitConnectMessage.value = playitStatus.value.linked
-    ? 'Replace the current Playit link for this server.'
-    : 'Paste your one-time Playit setup code to connect this server.'
-  showPlayitConnectModal.value = true
-}
-
-function closePlayitConnectModal() {
-  if (playitBusy.value) return
-  showPlayitConnectModal.value = false
-}
-
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-async function waitForPlayitTunnel(serverWasRunning) {
-  let latest = null
-  const attempts = serverWasRunning ? 15 : 20
-
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    playitConnectMessage.value = attempt === 0
-      ? 'Waiting for Playit to finish creating the tunnel...'
-      : `Still waiting for the tunnel... (${attempt + 1}/${attempts})`
-
-    await delay(2000)
-
-    try {
-      const runtimeStatus = await axios.post(`/api/servers/${serverId}/playit/runtime/sync`)
-      latest = runtimeStatus.data
-      if (latest?.tunnel_created) {
-        return latest
-      }
-    } catch (error) {
-      return {
-        ...latest,
-        tunnel_create_detail: error.response?.data?.detail || error.message || 'Failed while waiting for tunnel creation.',
-      }
-    }
-  }
-
-  return latest
-}
-
-function detectPlayitPlatform() {
-  const platform = String(navigator.userAgentData?.platform || navigator.platform || '').toLowerCase()
-  if (platform.includes('win')) return 'windows'
-  if (platform.includes('mac')) return 'macos'
-  return 'linux'
-}
-
-function buildPlayitUrl(path) {
-  return new URL(`${playitApiBase}${path}`, window.location.origin)
-}
-
-async function playitRequest(method, path, body = null) {
-  const url = buildPlayitUrl(path)
-  const headers = {
-    'X-EnderPanel-Username': authStore.user?.username || '',
-    'X-EnderPanel-Platform': detectPlayitPlatform(),
-  }
-
-  if (body) {
-    headers['Content-Type'] = 'application/json'
-  }
-
-  const res = await fetch(url.toString(), {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  })
-
-  const raw = await res.text()
-  let data = null
-
-  try {
-    data = raw ? JSON.parse(raw) : null
-  } catch {
-    data = null
-  }
-
-  if (!res.ok) {
-    const error = new Error(data?.detail || raw || `Playit request failed with status ${res.status}`)
-    error.response = { status: res.status, data: data || { detail: raw || `Playit request failed with status ${res.status}` } }
-    throw error
-  }
-
-  return data
+  updatePlayitClaimPolling()
 }
 
 async function fetchPlayitStatus() {
-  let hostedData = null
-  let runtimeData = null
-  let healthData = null
-  try {
-    hostedData = await playitRequest('GET', `/status?serverId=${encodeURIComponent(serverId)}`)
-  } catch (e) {
-    console.error('Failed to fetch hosted Playit status:', e)
-  }
-
-  if (!hostedData) {
-    try {
-      healthData = await playitRequest('GET', '/health')
-    } catch (e) {
-      console.error('Failed to fetch Playit health:', e)
-    }
-  }
-
   try {
     const runtimeRes = await axios.get(`/api/servers/${serverId}/playit/runtime`)
-    runtimeData = runtimeRes.data
+    applyPlayitStatus({
+      ...runtimeRes.data,
+      connection_error: false,
+      server_running: playitStatus.value.server_running,
+      recommended_local_port: server.value?.port || runtimeRes.data?.recommended_local_port || playitStatus.value.recommended_local_port,
+    })
+    updatePlayitClaimPolling()
+    return true
   } catch (e) {
-    console.error('Failed to fetch local Playit runtime status:', e)
-  }
-
-  if (!hostedData && !healthData && !runtimeData) {
+    if (isServerMissingError(e)) {
+      handleServerMissing()
+      return false
+    }
+    console.error('Failed to fetch Playit runtime status:', e)
     playitStatus.value.connection_error = true
-    return
+    updatePlayitClaimPolling()
+    return false
   }
-
-  const mergedData = {
-    ...(hostedData || {}),
-    ...(runtimeData || {}),
-    connection_error: false,
-  }
-
-  if (!hostedData && healthData) {
-    mergedData.partner_configured = healthData.partner_configured !== false
-  } else if (!hostedData && !healthData) {
-    mergedData.partner_configured = true
-  }
-
-  mergedData.server_running = playitStatus.value.server_running
-  mergedData.enabled = runtimeData?.enabled ?? playitStatus.value.enabled
-  mergedData.recommended_local_port = server.value?.port || hostedData?.recommended_local_port || playitStatus.value.recommended_local_port
-
-  if (!runtimeData?.linked) {
-    clearStoredPlayitLink()
-  }
-
-  applyPlayitStatus(mergedData)
 }
 
 async function syncPlayitStatus() {
-  await fetchPlayitStatus()
-}
-
-async function connectPlayit() {
-  playitBusy.value = true
   try {
-    playitConnectMessage.value = 'Contacting Playit and claiming your agent...'
-    const data = await playitRequest('POST', `/connect?serverId=${encodeURIComponent(serverId)}`, {
-      setup_code: playitSetupCode.value.trim(),
-      server_port: server.value?.port || playitStatus.value.recommended_local_port,
-      server_name: server.value?.name || 'Minecraft Server',
-    })
-    if (!data.agent_secret_key) {
-      throw new Error('Playit did not return an agent secret key.')
-    }
-
-    const runtimeRes = await axios.post(`/api/servers/${serverId}/playit/runtime/link`, {
-      agent_id: data.agent_id || null,
-      agent_secret_key: data.agent_secret_key,
-      saved_tunnel_id: data.saved_tunnel_id || null,
-      saved_domain: data.saved_domain || '',
-    })
-    let finalData = {
-      ...data,
+    const runtimeRes = await axios.post(`/api/servers/${serverId}/playit/runtime/sync`)
+    applyPlayitStatus({
       ...runtimeRes.data,
-    }
-
-    if (!finalData.tunnel_created && finalData.tunnel_create_detail && !playitStatus.value.server_running) {
-      try {
-        playitConnectMessage.value = 'Starting the server so Playit can attach and create the tunnel...'
-        await axios.post(`/api/servers/${serverId}/start`, {})
-        await fetchServer()
-        const runtimeStatus = await axios.post(`/api/servers/${serverId}/playit/runtime/sync`)
-        finalData = {
-          ...finalData,
-          ...runtimeStatus.data,
-        }
-      } catch (startError) {
-        const startDetail = startError.response?.data?.detail || startError.message || 'Failed to auto-start the server.'
-        finalData = {
-          ...finalData,
-          tunnel_create_detail: startDetail,
-        }
-      }
-    }
-
-    if (!finalData.tunnel_created && finalData.linked) {
-      const waited = await waitForPlayitTunnel(Boolean(finalData.server_running || playitStatus.value.server_running || server.value?.status === 'running'))
-      if (waited) {
-        finalData = {
-          ...finalData,
-          ...waited,
-        }
-      }
-    }
-
-    if (!finalData.linked) {
-      throw new Error(finalData.tunnel_create_detail || 'EnderPanel could not finish linking Playit locally.')
-    }
-
-    saveStoredPlayitLink(finalData)
-    applyPlayitStatus(finalData)
-    await fetchServer()
-    playitSetupCode.value = ''
-    if (finalData.tunnel_created) {
-      playitConnectMessage.value = `Tunnel ready: ${finalData.saved_domain || 'Playit address created.'}`
-      showPlayitConnectModal.value = false
-    } else {
-      playitConnectMessage.value = finalData.tunnel_create_detail || 'Server needs to be started to make a tunnel.'
-    }
-    toast({
-      type: finalData.tunnel_created ? 'success' : 'warning',
-      title: finalData.tunnel_created ? 'Linked and Tunnel Created' : 'Linked',
-      message: finalData.tunnel_created
-        ? 'Playit account linked and tunnel created successfully.'
-        : (finalData.tunnel_create_detail || 'Server needs to be started to make a tunnel.'),
+      connection_error: false,
+      server_running: playitStatus.value.server_running,
+      recommended_local_port: server.value?.port || runtimeRes.data?.recommended_local_port || playitStatus.value.recommended_local_port,
     })
+    updatePlayitClaimPolling()
+    return true
   } catch (e) {
-    console.error('Playit link failed:', {
-      message: e.message,
-      status: e.response?.status,
-      detail: e.response?.data?.detail,
-      data: e.response?.data,
-    })
+    if (isServerMissingError(e)) {
+      handleServerMissing()
+      return false
+    }
+    console.error('Failed to sync Playit runtime status:', e)
     toast({
       type: 'error',
-      title: 'Link Failed',
-      message:
-        e.response?.data?.detail ||
-        e.response?.data?.error ||
-        e.response?.data?.message ||
-        (e.response?.status === 400 ? 'Playit rejected the setup code. Try a brand-new one-time code from the Playit setup page.' : null) ||
-        e.message ||
-        'Failed to link Playit.',
+      title: 'Refresh Failed',
+      message: e.response?.data?.detail || 'Could not refresh Playit right now.',
     })
-  } finally {
-    if (!playitStatus.value.tunnel_created) {
-      playitConnectMessage.value = playitStatus.value.linked
-        ? (playitStatus.value.tunnel_create_detail || 'Server needs to be started to make a tunnel.')
-        : 'Paste your one-time Playit setup code to connect this server.'
+    updatePlayitClaimPolling()
+    return false
+  }
+}
+
+async function refreshServerActionState({ includeConsoleReplay = false } = {}) {
+  const results = await Promise.allSettled([
+    fetchServer(),
+    fetchPlayitStatus(),
+  ])
+
+  const serverFailed = results[0]?.status === 'rejected'
+  const playitFailed = results[1]?.status === 'rejected'
+
+  if (serverFailed) {
+    console.error('Failed to refresh server state after action:', results[0].reason)
+  }
+  if (playitFailed) {
+    console.error('Failed to refresh Playit state after action:', results[1].reason)
+  }
+
+  if (activeTab.value === 'console') {
+    if (server.value?.status === 'running') {
+      if (!hasActiveConsoleStream()) {
+        connectConsoleStream({ replay: includeConsoleReplay || !consoleLines.value.length })
+      }
+    } else {
+      disconnectConsoleStream()
+      await fetchRecentConsoleLogs()
     }
-    playitBusy.value = false
   }
 }
 
 async function enablePlayit() {
+  if (!playitStatus.value.server_running) {
+    showPlayitNeedsServerModal.value = true
+    return
+  }
+
   playitBusy.value = true
   try {
-    const res = await axios.post(`${playitApiBase}/servers/${serverId}/playit/enable`)
+    const res = await axios.post(`/api/servers/${serverId}/playit/runtime/enable`)
     applyPlayitStatus(res.data)
     await fetchServer()
-    toast({ type: 'success', title: 'Playit Enabled', message: playitStatus.value.server_running ? 'The Playit agent is running for this server.' : 'Playit will start when the server starts.' })
+    toast({
+      type: 'success',
+      title: 'Playit Enabled',
+      message: res.data?.claim_url
+        ? 'Playit agent started. Open the claim link to finish linking it.'
+        : (playitStatus.value.server_running ? 'The Playit agent is running for this server.' : 'Playit will start when the server starts.')
+    })
   } catch (e) {
     toast({ type: 'error', title: 'Enable Failed', message: e.response?.data?.detail || 'Failed to enable Playit.' })
   } finally {
@@ -1807,17 +2547,14 @@ async function enablePlayit() {
   }
 }
 
-async function disablePlayit() {
-  playitBusy.value = true
-  try {
-    const res = await axios.post(`${playitApiBase}/servers/${serverId}/playit/disable`)
-    applyPlayitStatus(res.data)
-    await fetchServer()
-    toast({ type: 'success', title: 'Playit Disabled', message: 'Playit has been disabled for this server.' })
-  } catch (e) {
-    toast({ type: 'error', title: 'Disable Failed', message: e.response?.data?.detail || 'Failed to disable Playit.' })
-  } finally {
-    playitBusy.value = false
+function openPlayitClaimLink() {
+  if (!playitStatus.value.server_running) {
+    showPlayitNeedsServerModal.value = true
+    return
+  }
+
+  if (playitStatus.value.claim_url) {
+    window.open(playitStatus.value.claim_url, '_blank', 'noopener,noreferrer')
   }
 }
 
@@ -1833,7 +2570,6 @@ async function disconnectPlayit() {
   playitBusy.value = true
   try {
     await axios.post(`/api/servers/${serverId}/playit/runtime/disconnect`)
-    clearStoredPlayitLink()
     applyPlayitStatus({
       linked: false,
       agent_id: null,
@@ -1867,48 +2603,18 @@ async function uploadServerAvatar(event) {
   event.target.value = ''
 }
 
-async function handleConsoleSocketClose(lifetimeMs) {
-  if (!shouldKeepConsoleConnected || activeTab.value !== 'console') {
-    return
-  }
-
-  try {
-    await fetchServer()
-  } catch {}
-
-  if (server.value?.status === 'running') {
-    if (lifetimeMs < 1500) {
-      reconnectAttempts += 1
-    } else {
-      reconnectAttempts = 0
-    }
-
-    if (reconnectAttempts >= 3) {
-      appendConsoleLine('[Console connection failed repeatedly. Reload the page or restart the backend.]')
-      finalizeConsoleLines()
-      return
-    }
-
-    const delay = 2000 * Math.max(1, reconnectAttempts)
-    reconnectTimeout = setTimeout(() => connectWebSocket({ replay: true }), delay)
-    return
-  }
-
-  reconnectAttempts = 0
-  await fetchRecentConsoleLogs()
-}
-
 async function monitorConsoleStartup(attempt = 0) {
-  if (!shouldKeepConsoleConnected || activeTab.value !== 'console') {
+  if (serverMissing.value || !shouldKeepConsoleConnected || activeTab.value !== 'console') {
     return
   }
 
-  try {
-    await fetchServer()
-  } catch {}
+  const serverStillExists = await fetchServer()
+  if (serverStillExists === false || serverMissing.value) {
+    return
+  }
 
   if (server.value?.status === 'running') {
-    connectWebSocket({ replay: true })
+    connectConsoleStream({ replay: true })
     return
   }
 
@@ -1923,18 +2629,8 @@ async function monitorConsoleStartup(attempt = 0) {
   }, 1500)
 }
 
-function connectWebSocket(options = {}) {
+function getConsoleStreamUrl(options = {}) {
   const { replay = false } = options
-  shouldKeepConsoleConnected = true
-  if (ws) {
-    ws.close()
-    ws = null
-  }
-  if (reconnectTimeout) {
-    clearTimeout(reconnectTimeout)
-    reconnectTimeout = null
-  }
-
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const host = (() => {
     const { hostname, port } = window.location
@@ -1950,55 +2646,130 @@ function connectWebSocket(options = {}) {
   if (replay) {
     params.set('replay', '1')
   }
-  const authToken = localStorage.getItem('token')
-  if (authToken) {
-    params.set('token', authToken)
-  }
   const query = params.toString() ? `?${params.toString()}` : ''
-  const wsUrl = `${protocol}//${host}/api/servers/${serverId}/ws${query}`
+  return `${protocol}//${host}/api/servers/${serverId}/ws${query}`
+}
 
-  try {
-    const openedAt = Date.now()
-    ws = new WebSocket(wsUrl)
+function handleConsoleStreamMessage(payload) {
+  if (!payload || typeof payload !== 'object') return
 
-    ws.onopen = () => {
-      reconnectAttempts = 0
-      hasLoadedConsoleHistory = true
-      if (server.value?.container_started_at) {
-        lastConsoleStartedAt = server.value.container_started_at
-        saveConsoleHistory()
-      }
+  if (payload.type === 'status') {
+    const startedAt = String(payload.started_at || '')
+    if (startedAt && startedAt !== lastConsoleStartedAt) {
+      consoleLines.value = []
+      consoleLineBuffer = ''
+      lastConsoleStartedAt = startedAt
+      renderConsoleHistory()
+      saveConsoleHistory()
+    } else if (startedAt && !lastConsoleStartedAt) {
+      lastConsoleStartedAt = startedAt
     }
 
-    ws.onmessage = (event) => {
-      appendConsoleChunk(event.data)
+    if (payload.status && server.value) {
+      server.value.status = payload.status
+      server.value.container_started_at = startedAt
     }
+    consoleConnectionState.value = payload.status === 'running' ? 'connected' : 'idle'
+    return
+  }
 
-    ws.onclose = () => {
-      const lifetimeMs = Date.now() - openedAt
-      ws = null
-      void handleConsoleSocketClose(lifetimeMs)
+  if (payload.type === 'chunk') {
+    if (payload.started_at && payload.started_at !== lastConsoleStartedAt) {
+      consoleLines.value = []
+      consoleLineBuffer = ''
+      lastConsoleStartedAt = payload.started_at
+      renderConsoleHistory()
     }
+    appendConsoleChunk(payload.chunk || '')
+    return
+  }
 
-    ws.onerror = () => {
-      ws = null
-    }
-  } catch (e) {
-    appendConsoleLine('[Failed to connect to console]')
+  if (payload.type === 'error') {
+    appendConsoleLine(`[${payload.detail || 'Console stream error'}]`)
     finalizeConsoleLines()
   }
 }
 
-function disconnectWebSocket() {
-  shouldKeepConsoleConnected = false
-  reconnectAttempts = 0
+function connectConsoleStream(options = {}) {
+  if (serverMissing.value) return
+  shouldKeepConsoleConnected = true
+  if (consoleStream) {
+    consoleStream.close()
+    consoleStream = null
+  }
   if (reconnectTimeout) {
     clearTimeout(reconnectTimeout)
     reconnectTimeout = null
   }
-  if (ws) {
-    ws.close()
-    ws = null
+
+  try {
+    const streamUrl = getConsoleStreamUrl(options)
+    consoleConnectionState.value = 'connecting'
+    const stream = new WebSocket(streamUrl)
+    consoleStream = stream
+
+    stream.onopen = () => {
+      if (consoleStream !== stream) return
+      consoleConnectionState.value = 'connected'
+      if (server.value?.container_started_at) {
+        lastConsoleStartedAt = server.value.container_started_at
+        saveConsoleHistory()
+      }
+      fitConsoleTerminal()
+    }
+
+    stream.onmessage = (event) => {
+      if (consoleStream !== stream) return
+      try {
+        handleConsoleStreamMessage(JSON.parse(event.data))
+      } catch (error) {
+        console.error('Failed to parse console stream event:', error)
+      }
+    }
+
+    stream.onerror = () => {
+      if (consoleStream !== stream) return
+      consoleConnectionState.value = server.value?.status === 'running' ? 'idle' : 'idle'
+    }
+
+    stream.onclose = () => {
+      if (consoleStream !== stream) {
+        return
+      }
+      consoleConnectionState.value = server.value?.status === 'running' ? 'idle' : 'idle'
+      const shouldReconnect = !serverMissing.value && shouldKeepConsoleConnected && activeTab.value === 'console' && server.value?.status === 'running'
+      consoleStream = null
+      if (shouldReconnect) {
+        reconnectTimeout = setTimeout(async () => {
+          const stillExists = await fetchServer()
+          if (stillExists !== false && !serverMissing.value) {
+            connectConsoleStream()
+          }
+        }, 1200)
+      } else if (!shouldKeepConsoleConnected || activeTab.value !== 'console') {
+        disconnectConsoleStream()
+      } else {
+        void fetchRecentConsoleLogs()
+      }
+    }
+  } catch (e) {
+    consoleConnectionState.value = 'idle'
+    appendConsoleLine('[Failed to connect to console stream]')
+    renderConsoleHistory()
+    finalizeConsoleLines()
+  }
+}
+
+function disconnectConsoleStream() {
+  shouldKeepConsoleConnected = false
+  consoleConnectionState.value = 'idle'
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout)
+    reconnectTimeout = null
+  }
+  if (consoleStream) {
+    consoleStream.close()
+    consoleStream = null
   }
 }
 
@@ -2014,11 +2785,8 @@ async function startServer() {
     }
 
     clearConsoleHistory()
-    bumpConsoleStartupBoost()
     await axios.post(`/api/servers/${serverId}/start`)
-    await fetchServer()
-    await syncPlayitStatus()
-    await fetchPlayitStatus()
+    await refreshServerActionState({ includeConsoleReplay: true })
     void monitorConsoleStartup()
     toast({ type: 'success', title: 'Started', message: 'Server starting...' })
   } catch (e) {
@@ -2041,11 +2809,8 @@ async function acceptEula() {
   toast({ type: 'success', title: 'EULA Accepted', message: 'Server starting...' })
   try {
     clearConsoleHistory()
-    bumpConsoleStartupBoost()
     await axios.post(`/api/servers/${serverId}/start`, { accept_eula: true })
-    await fetchServer()
-    await syncPlayitStatus()
-    await fetchPlayitStatus()
+    await refreshServerActionState({ includeConsoleReplay: true })
     void monitorConsoleStartup()
   } catch (e) {
     const msg = e.response?.data?.detail || 'Failed to accept EULA'
@@ -2058,14 +2823,13 @@ async function acceptEula() {
 
 async function stopServer() {
   try {
-    disconnectWebSocket()
+    disconnectConsoleStream()
     await axios.post(`/api/servers/${serverId}/stop`, {}, { timeout: 15000 })
     await new Promise(r => setTimeout(r, 500))
-    await fetchServer()
-    await syncPlayitStatus()
-    await fetchPlayitStatus()
-    consoleLines.value.push('[Server stopped]')
-    saveConsoleHistory()
+    await refreshServerActionState()
+    appendConsoleLine('[Server stopped]')
+    renderConsoleHistory()
+    finalizeConsoleLines()
   } catch (e) {
     const msg = e.response?.data?.detail || e.message || 'Failed to stop server'
     console.error('Stop error:', msg)
@@ -2075,14 +2839,16 @@ async function stopServer() {
 
 async function restartServer() {
   try {
-    disconnectWebSocket()
+    disconnectConsoleStream()
     clearConsoleHistory()
     await axios.post(`/api/servers/${serverId}/restart`)
     await new Promise(r => setTimeout(r, 200))
-    await fetchServer()
-    await syncPlayitStatus()
-    await fetchPlayitStatus()
-    setTimeout(connectWebSocket, 500)
+    await refreshServerActionState({ includeConsoleReplay: true })
+    setTimeout(() => {
+      if (!hasActiveConsoleStream() && activeTab.value === 'console' && server.value?.status === 'running') {
+        connectConsoleStream()
+      }
+    }, 500)
     toast({ type: 'success', title: 'Restarted', message: 'Server restarting...' })
   } catch (e) {
     const msg = e.response?.data?.detail || 'Failed to restart server'
@@ -2091,61 +2857,202 @@ async function restartServer() {
   }
 }
 
-function sendCommand() {
-  if (!command.value.trim()) return
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(command.value)
-    command.value = ''
-  } else if (server.value?.status === 'running') {
-    connectWebSocket()
-    setTimeout(() => {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(command.value)
-        command.value = ''
-      } else {
-        toast({ type: 'info', title: 'Console', message: 'Connecting to console...' })
-      }
-    }, 500)
-  } else {
+async function sendCommand() {
+  const nextCommand = command.value.trim()
+  if (!nextCommand) return
+  if (server.value?.status !== 'running') {
     toast({ type: 'warning', title: 'Server Offline', message: 'Server is not running' })
+    return
+  }
+
+  try {
+    if (consoleStream && consoleStream.readyState === WebSocket.OPEN) {
+      consoleStream.send(JSON.stringify({ event: 'command', command: nextCommand }))
+    } else {
+      await axios.post(`/api/servers/${serverId}/console/command`, { command: nextCommand })
+    }
+    rememberConsoleCommand(nextCommand)
+    command.value = ''
+    commandHistoryIndex.value = -1
+    if (!consoleStream || consoleStream.readyState === WebSocket.CLOSED) {
+      connectConsoleStream()
+    }
+  } catch (e) {
+    toast({ type: 'error', title: 'Command Failed', message: e.response?.data?.detail || 'Failed to send command' })
   }
 }
 
-async function navigateTo(path) {
-  currentPath.value = path
+async function navigateTo(path, options = {}) {
+  const { silent = false } = options
+  const requestedPath = path || ''
+  currentPath.value = requestedPath
+  const requestId = ++filesRequestId
   try {
     const res = await axios.get(`/api/servers/${serverId}/files/`, {
-      params: { path, _: Date.now() }
+      params: { path: requestedPath, _: Date.now() }
     })
+    if (requestId !== filesRequestId || currentPath.value !== requestedPath) {
+      return
+    }
     files.value = res.data.sort((a, b) => {
       if (a.is_dir && !b.is_dir) return -1
       if (!a.is_dir && b.is_dir) return 1
       return a.name.localeCompare(b.name)
     })
   } catch (e) {
+    if (requestId !== filesRequestId || currentPath.value !== requestedPath) {
+      return
+    }
     files.value = []
-    if (path) {
+    if (requestedPath) {
       currentPath.value = ''
     }
-    toast({ type: 'error', title: 'Files Error', message: e.response?.data?.detail || 'Could not load files.' })
+    if (!silent) {
+      toast({ type: 'error', title: 'Files Error', message: e.response?.data?.detail || 'Could not load files.' })
+    }
   }
 }
 
+function formatTimestamp(value) {
+  if (!value) return 'Unknown time'
+  try {
+    return new Date(value * 1000).toLocaleString()
+  } catch {
+    return 'Unknown time'
+  }
+}
+
+function isFileSelected(path) {
+  return selectedFiles.value.includes(path)
+}
+
+function toggleFileSelection(path) {
+  if (isFileSelected(path)) {
+    selectedFiles.value = selectedFiles.value.filter((item) => item !== path)
+    return
+  }
+  selectedFiles.value = [...selectedFiles.value, path]
+}
+
+function clearSelectedFiles() {
+  selectedFiles.value = []
+}
+
+function canExtractFile(name) {
+  return String(name || '').toLowerCase().endsWith('.zip')
+}
+
+function isRiskyEditableFile(path) {
+  return /\.(jar|zip|gz|tar|7z|png|jpe?g|gif|webp|ico|pdf|db|sqlite)$/i.test(path || '')
+}
+
+function createSuggestedArchiveName() {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  return `archive-${stamp}.zip`
+}
+
+async function fetchFileLimits() {
+  try {
+    const res = await axios.get(`/api/servers/${serverId}/files/limits`)
+    Object.assign(fileLimits, res.data || {})
+  } catch (e) {
+    console.error('Failed to fetch file limits:', e)
+  }
+}
+
+function openUploadModal() {
+  resetUploadSelection()
+  showUpload.value = true
+}
+
+function closeUploadModal() {
+  if (uploadInProgress.value) return
+  showUpload.value = false
+  resetUploadSelection()
+}
+
+function resetUploadSelection() {
+  uploadFileRef.value = null
+  uploadFiles.value = []
+  uploadQueue.value = []
+}
+
+function createUploadQueueFromFiles(fileList) {
+  uploadQueue.value = fileList.map((file, index) => ({
+    id: `${Date.now()}-${index}-${file.name}`,
+    file,
+    relativePath: file.webkitRelativePath || file.name,
+    size: file.size || 0,
+    progress: 0,
+    status: 'queued',
+    error: '',
+  }))
+}
+
+function handleFileUpload(event) {
+  uploadFileRef.value = event.target.files?.[0] || null
+  const nextFiles = uploadFileRef.value ? [uploadFileRef.value] : []
+  createUploadQueueFromFiles(nextFiles)
+}
+
+function handleFolderUpload(event) {
+  uploadFiles.value = Array.from(event.target.files || [])
+  createUploadQueueFromFiles(uploadFiles.value)
+}
+
+async function openFileEntry(file) {
+  const path = currentPath.value ? `${currentPath.value}/${file.name}` : file.name
+  if (file.is_dir) {
+    await navigateTo(path)
+    return
+  }
+  await editFile(path)
+}
+
 async function editFile(path) {
+  if (isRiskyEditableFile(path)) {
+    const proceed = await confirmFn({
+      title: 'Open Carefully',
+      message: 'This file type may not be safe or useful to edit as plain text. Open it anyway?',
+      type: 'warning',
+      confirmText: 'Open',
+    })
+    if (!proceed) return
+  }
   try {
     const res = await axios.get(`/api/servers/${serverId}/files/read`, { params: { path } })
     editingFile.value = path
     fileContent.value = res.data.content
+    originalFileContent.value = res.data.content
+    fileReadSize.value = Number(res.data.size) || 0
     showEditor.value = true
   } catch (e) {
-    toast({ type: 'error', title: 'Read Failed', message: 'Failed to read file' })
+    toast({ type: 'error', title: 'Read Failed', message: e.response?.data?.detail || 'Failed to read file' })
+  }
+}
+
+async function requestCloseEditor() {
+  if (!editorIsDirty.value) {
+    showEditor.value = false
+    return
+  }
+  const ok = await confirmFn({
+    title: 'Discard Changes',
+    message: 'Close the editor and lose your unsaved changes?',
+    type: 'warning',
+    confirmText: 'Discard',
+  })
+  if (ok) {
+    showEditor.value = false
   }
 }
 
 async function saveFile() {
   try {
     await axios.post(`/api/servers/${serverId}/files/write`, { path: editingFile.value, content: fileContent.value })
+    originalFileContent.value = fileContent.value
     showEditor.value = false
+    await navigateTo(currentPath.value, { silent: true })
     toast({ type: 'success', title: 'Saved', message: 'File saved successfully' })
   } catch (e) {
     toast({ type: 'error', title: 'Save Failed', message: 'Failed to save file' })
@@ -2153,32 +3060,45 @@ async function saveFile() {
 }
 
 async function uploadFile() {
-  if (uploadMode.value === 'file' && uploadFileRef.value) {
-    try {
+  if (uploadQueue.value.length === 0) return
+
+  uploadInProgress.value = true
+  let uploadedCount = 0
+  try {
+    for (const item of uploadQueue.value) {
+      item.status = 'uploading'
+      item.error = ''
+      item.progress = 0
       const formData = new FormData()
-      formData.append('file', uploadFileRef.value)
-      await axios.post(`/api/servers/${serverId}/files/upload`, formData, { params: { path: currentPath.value } })
-      showUpload.value = false
-      uploadFileRef.value = null
-      await navigateTo(currentPath.value)
-      toast({ type: 'success', title: 'Uploaded', message: 'File uploaded successfully' })
-    } catch (e) {
-      toast({ type: 'error', title: 'Upload Failed', message: 'Failed to upload file' })
-    }
-  } else if (uploadMode.value === 'folder' && uploadFiles.value.length > 0) {
-    try {
-      const formData = new FormData()
-      for (const file of uploadFiles.value) {
-        formData.append('files', file, file.webkitRelativePath || file.name)
+      formData.append('file', item.file)
+      if (uploadMode.value === 'folder') {
+        formData.append('relative_path', item.relativePath)
       }
-      await axios.post(`/api/servers/${serverId}/files/upload-folder`, formData, { params: { path: currentPath.value } })
-      showUpload.value = false
-      uploadFiles.value = []
-      await navigateTo(currentPath.value)
-      toast({ type: 'success', title: 'Uploaded', message: 'Folder uploaded successfully' })
-    } catch (e) {
-      toast({ type: 'error', title: 'Upload Failed', message: 'Failed to upload folder' })
+      try {
+        await axios.post(`/api/servers/${serverId}/files/upload`, formData, {
+          params: { path: currentPath.value },
+          onUploadProgress: (event) => {
+            if (!event.total) return
+            item.progress = Math.max(1, Math.min(100, Math.round((event.loaded / event.total) * 100)))
+          },
+        })
+        item.progress = 100
+        item.status = 'done'
+        uploadedCount += 1
+      } catch (e) {
+        item.status = 'error'
+        item.error = e.response?.data?.detail || 'Failed to upload this file'
+      }
     }
+    await navigateTo(currentPath.value)
+    if (uploadedCount > 0) {
+      toast({ type: 'success', title: 'Upload Complete', message: `${uploadedCount} file${uploadedCount === 1 ? '' : 's'} uploaded successfully` })
+    }
+    if (uploadFailedCount.value === 0) {
+      closeUploadModal()
+    }
+  } finally {
+    uploadInProgress.value = false
   }
 }
 
@@ -2187,6 +3107,7 @@ async function deleteFile(path) {
   if (ok) {
     try {
       await axios.delete(`/api/servers/${serverId}/files/`, { params: { path } })
+      selectedFiles.value = selectedFiles.value.filter((item) => item !== path)
       await navigateTo(currentPath.value)
       toast({ type: 'success', title: 'Deleted', message: 'File deleted' })
     } catch (e) {
@@ -2195,18 +3116,119 @@ async function deleteFile(path) {
   }
 }
 
-async function createFolder() {
-  const name = prompt('Folder name:')
-  if (name) {
-    const path = currentPath.value ? `${currentPath.value}/${name}` : name
-    try {
-      await axios.post(`/api/servers/${serverId}/files/mkdir`, { path })
-      await navigateTo(currentPath.value)
-      toast({ type: 'success', title: 'Created', message: `Folder "${name}" created` })
-    } catch (e) {
-      toast({ type: 'error', title: 'Create Failed', message: 'Failed to create folder' })
-    }
+function openCreateFolderModal() {
+  createFolderForm.name = ''
+  showCreateFolderModal.value = true
+}
+
+async function submitCreateFolder() {
+  const name = createFolderForm.name.trim()
+  if (!name) return
+  const path = currentPath.value ? `${currentPath.value}/${name}` : name
+  try {
+    await axios.post(`/api/servers/${serverId}/files/mkdir`, { path })
+    showCreateFolderModal.value = false
+    await navigateTo(currentPath.value)
+    toast({ type: 'success', title: 'Created', message: `Folder "${name}" created` })
+  } catch (e) {
+    toast({ type: 'error', title: 'Create Failed', message: e.response?.data?.detail || 'Failed to create folder' })
   }
+}
+
+function openRenameModalFor(file) {
+  renameForm.path = currentPath.value ? `${currentPath.value}/${file.name}` : file.name
+  renameForm.newName = file.name
+  showRenameModal.value = true
+}
+
+async function saveRename() {
+  if (!renameForm.newName.trim()) return
+  try {
+    const res = await axios.post(`/api/servers/${serverId}/files/rename`, {
+      path: renameForm.path,
+      new_name: renameForm.newName.trim(),
+    })
+    const oldPath = renameForm.path
+    const newPath = res.data?.path || oldPath
+    selectedFiles.value = selectedFiles.value.map((item) => (item === oldPath ? newPath : item))
+    if (editingFile.value === oldPath) {
+      editingFile.value = newPath
+    }
+    showRenameModal.value = false
+    await navigateTo(currentPath.value)
+    toast({ type: 'success', title: 'Renamed', message: 'File renamed successfully' })
+  } catch (e) {
+    toast({ type: 'error', title: 'Rename Failed', message: e.response?.data?.detail || 'Failed to rename file' })
+  }
+}
+
+function openArchiveModal() {
+  if (!hasSelectedFiles.value) return
+  archiveForm.outputName = createSuggestedArchiveName()
+  showArchiveModal.value = true
+}
+
+async function createArchiveFromSelection() {
+  if (!selectedFiles.value.length) return
+  try {
+    await axios.post(`/api/servers/${serverId}/files/archive`, {
+      path: currentPath.value,
+      items: selectedFiles.value,
+      output_name: archiveForm.outputName.trim() || createSuggestedArchiveName(),
+    })
+    showArchiveModal.value = false
+    clearSelectedFiles()
+    await navigateTo(currentPath.value)
+    toast({ type: 'success', title: 'Archive Created', message: 'ZIP archive created successfully' })
+  } catch (e) {
+    toast({ type: 'error', title: 'Archive Failed', message: e.response?.data?.detail || 'Failed to create archive' })
+  }
+}
+
+async function extractFile(path) {
+  const ok = await confirmFn({ title: 'Extract ZIP', message: 'Extract this ZIP archive into the current folder?', type: 'info', confirmText: 'Extract' })
+  if (!ok) return
+  try {
+    await axios.post(`/api/servers/${serverId}/files/extract`, { path })
+    await navigateTo(currentPath.value)
+    toast({ type: 'success', title: 'Archive Extracted', message: 'ZIP archive extracted successfully' })
+  } catch (e) {
+    toast({ type: 'error', title: 'Extract Failed', message: e.response?.data?.detail || 'Failed to extract archive' })
+  }
+}
+
+async function runFileSearch() {
+  const query = fileSearchQuery.value.trim()
+  if (query.length < 2) {
+    toast({ type: 'warning', title: 'Search Too Short', message: 'Use at least 2 characters.' })
+    return
+  }
+  searchingFiles.value = true
+  try {
+    const res = await axios.get(`/api/servers/${serverId}/files/search`, {
+      params: { query, path: currentPath.value },
+    })
+    fileSearchResults.value = res.data.results || []
+    fileSearchWasTruncated.value = !!res.data.truncated
+    showFileSearchModal.value = true
+  } catch (e) {
+    toast({ type: 'error', title: 'Search Failed', message: e.response?.data?.detail || 'Failed to search files' })
+  } finally {
+    searchingFiles.value = false
+  }
+}
+
+async function openSearchResult(result) {
+  showFileSearchModal.value = false
+  if (result.is_dir) {
+    await navigateTo(result.path)
+    return
+  }
+  const parent = result.parent || ''
+  if (parent !== currentPath.value) {
+    await navigateTo(parent, { silent: true })
+  }
+  await editFile(result.path)
 }
 
 async function searchPlugins() {
@@ -2421,6 +3443,227 @@ async function createBackup() {
   }
 }
 
+function resetTaskForm() {
+  editingTaskId.value = null
+  taskForm.name = ''
+  taskForm.action = 'backup'
+  taskForm.schedule_mode = 'interval'
+  taskForm.interval_minutes = 60
+  taskForm.run_time = '03:00'
+  taskForm.run_days = [0, 1, 2, 3, 4, 5, 6]
+  taskForm.enabled = true
+  taskForm.command = ''
+}
+
+function closeTaskModal() {
+  showTaskModal.value = false
+  resetTaskForm()
+}
+
+function openTaskModalForCreate() {
+  resetTaskForm()
+  showTaskModal.value = true
+}
+
+function editTask(task) {
+  editingTaskId.value = task.id
+  taskForm.name = task.name || ''
+  taskForm.action = task.action || 'backup'
+  taskForm.schedule_mode = task.schedule_mode || 'interval'
+  taskForm.interval_minutes = Number(task.interval_minutes) || 60
+  taskForm.run_time = task.run_time || '03:00'
+  taskForm.run_days = Array.isArray(task.run_days) && task.run_days.length ? [...task.run_days] : [0, 1, 2, 3, 4, 5, 6]
+  taskForm.enabled = task.enabled !== false
+  taskForm.command = task.command || ''
+  showTaskModal.value = true
+}
+
+function toggleTaskRunDay(dayValue) {
+  if (taskForm.run_days.includes(dayValue)) {
+    taskForm.run_days = taskForm.run_days.filter((day) => day !== dayValue)
+    return
+  }
+  taskForm.run_days = [...taskForm.run_days, dayValue].sort((a, b) => a - b)
+}
+
+function taskPayloadFromForm() {
+  return {
+    name: taskForm.name.trim(),
+    action: taskForm.action,
+    schedule_mode: taskForm.schedule_mode,
+    interval_minutes: Number(taskForm.interval_minutes) || 60,
+    run_time: taskForm.schedule_mode === 'specific_time' ? taskForm.run_time : null,
+    run_days: taskForm.schedule_mode === 'specific_time' ? [...taskForm.run_days].sort((a, b) => a - b) : [],
+    enabled: !!taskForm.enabled,
+    command: taskForm.action === 'command' ? taskForm.command.trim() : null,
+  }
+}
+
+function taskPayloadFromTask(task, overrides = {}) {
+  return {
+    name: task.name,
+    action: task.action,
+    schedule_mode: task.schedule_mode || 'interval',
+    interval_minutes: Number(task.interval_minutes) || 60,
+    run_time: task.schedule_mode === 'specific_time' ? (task.run_time || '03:00') : null,
+    run_days: task.schedule_mode === 'specific_time' ? (Array.isArray(task.run_days) ? [...task.run_days] : []) : [],
+    enabled: task.enabled !== false,
+    command: task.action === 'command' ? (task.command || '') : null,
+    ...overrides,
+  }
+}
+
+function taskActionLabel(action) {
+  const option = taskActionOptions.find((entry) => entry.value === action)
+  return option?.label || action
+}
+
+function formatTaskInterval(minutes) {
+  const value = Number(minutes) || 0
+  if (value < 60) return `${value} minute${value === 1 ? '' : 's'}`
+  if (value % 1440 === 0) {
+    const days = value / 1440
+    return `${days} day${days === 1 ? '' : 's'}`
+  }
+  if (value % 60 === 0) {
+    const hours = value / 60
+    return `${hours} hour${hours === 1 ? '' : 's'}`
+  }
+  const hours = Math.floor(value / 60)
+  const minutesPart = value % 60
+  return `${hours}h ${minutesPart}m`
+}
+
+function formatTaskRunDays(days) {
+  const values = Array.isArray(days) ? [...days].map((day) => Number(day)).filter((day) => day >= 0 && day <= 6).sort((a, b) => a - b) : []
+  if (!values.length) return 'no days selected'
+  if (values.length === 7) return 'every day'
+  return values
+    .map((value) => taskDayOptions.find((option) => option.value === value)?.label || String(value))
+    .join(', ')
+}
+
+function formatTaskSchedule(task) {
+  if ((task.schedule_mode || 'interval') === 'specific_time') {
+    const time = task.run_time || '00:00'
+    const days = formatTaskRunDays(task.run_days)
+    if (days === 'every day') {
+      return `Runs every day at ${time}`
+    }
+    return `Runs at ${time} on ${days}`
+  }
+  return `Runs every ${formatTaskInterval(task.interval_minutes)}`
+}
+
+function taskStatusLabel(task) {
+  if (!task.enabled) return 'Disabled'
+  if (task.last_status === 'running') return 'Running'
+  if (task.last_status === 'success') return 'Healthy'
+  if (task.last_status === 'failed') return 'Failed'
+  return 'Waiting'
+}
+
+function taskStatusBadgeClass(task) {
+  if (!task.enabled) return 'bg-gray-100 border-gray-200 text-gray-600 dark:bg-white/5 dark:border-white/10 dark:text-gray-300'
+  if (task.last_status === 'running') return 'bg-blue-100 border-blue-200 text-blue-700 dark:bg-blue-500/10 dark:border-blue-500/20 dark:text-blue-300'
+  if (task.last_status === 'success') return 'bg-emerald-100 border-emerald-200 text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-300'
+  if (task.last_status === 'failed') return 'bg-red-100 border-red-200 text-red-700 dark:bg-red-500/10 dark:border-red-500/20 dark:text-red-300'
+  return 'bg-yellow-100 border-yellow-200 text-yellow-700 dark:bg-yellow-500/10 dark:border-yellow-500/20 dark:text-yellow-300'
+}
+
+async function fetchTasks() {
+  tasksLoading.value = true
+  try {
+    const res = await axios.get(`/api/servers/${serverId}/tasks`)
+    tasks.value = Array.isArray(res.data) ? res.data : []
+  } catch (e) {
+    console.error('Failed to fetch tasks:', e)
+  } finally {
+    tasksLoading.value = false
+  }
+}
+
+async function saveTask() {
+  const payload = taskPayloadFromForm()
+  if (!payload.name) {
+    toast({ type: 'error', title: 'Task Name Required', message: 'Give this task a name first.' })
+    return
+  }
+  if (payload.action === 'command' && !payload.command) {
+    toast({ type: 'error', title: 'Command Required', message: 'Command tasks need a console command to send.' })
+    return
+  }
+  if (payload.schedule_mode === 'specific_time' && !payload.run_time) {
+    toast({ type: 'error', title: 'Time Required', message: 'Pick a time for this scheduled task.' })
+    return
+  }
+  if (payload.schedule_mode === 'specific_time' && payload.run_days.length === 0) {
+    toast({ type: 'error', title: 'Days Required', message: 'Pick at least one day for this scheduled task.' })
+    return
+  }
+
+  taskSaving.value = true
+  try {
+    if (editingTaskId.value) {
+      await axios.put(`/api/servers/${serverId}/tasks/${editingTaskId.value}`, payload)
+      toast({ type: 'success', title: 'Task Updated', message: 'Scheduled task updated successfully.' })
+    } else {
+      await axios.post(`/api/servers/${serverId}/tasks`, payload)
+      toast({ type: 'success', title: 'Task Created', message: 'Scheduled task created successfully.' })
+    }
+    closeTaskModal()
+    await fetchTasks()
+  } catch (e) {
+    toast({ type: 'error', title: 'Task Save Failed', message: e.response?.data?.detail || 'Failed to save scheduled task' })
+  } finally {
+    taskSaving.value = false
+  }
+}
+
+async function toggleTaskEnabled(task) {
+  try {
+    await axios.put(`/api/servers/${serverId}/tasks/${task.id}`, taskPayloadFromTask(task, { enabled: !task.enabled }))
+    await fetchTasks()
+  } catch (e) {
+    toast({ type: 'error', title: 'Task Update Failed', message: e.response?.data?.detail || 'Failed to update task state' })
+  }
+}
+
+async function runTaskNow(task) {
+  runningTaskId.value = task.id
+  try {
+    await axios.post(`/api/servers/${serverId}/tasks/${task.id}/run`)
+    await fetchTasks()
+    if (task.action === 'backup') {
+      await fetchBackups()
+    }
+    toast({ type: 'success', title: 'Task Started', message: `"${task.name}" ran successfully.` })
+  } catch (e) {
+    toast({ type: 'error', title: 'Task Run Failed', message: e.response?.data?.detail || 'Failed to run task' })
+  } finally {
+    runningTaskId.value = null
+  }
+}
+
+async function deleteTask(task) {
+  const ok = await confirmFn({ title: 'Delete Task', message: `Delete "${task.name}"?`, type: 'danger', confirmText: 'Delete' })
+  if (!ok) return
+
+  deletingTaskId.value = task.id
+  try {
+    await axios.delete(`/api/servers/${serverId}/tasks/${task.id}`)
+    if (editingTaskId.value === task.id) {
+      closeTaskModal()
+    }
+    await fetchTasks()
+    toast({ type: 'success', title: 'Task Deleted', message: 'Scheduled task deleted.' })
+  } catch (e) {
+    toast({ type: 'error', title: 'Task Delete Failed', message: e.response?.data?.detail || 'Failed to delete task' })
+  } finally {
+    deletingTaskId.value = null
+  }
+}
+
 async function restoreBackup(filename) {
   const ok = await confirmFn({ title: 'Restore Backup', message: `Restore "${filename}"? This will replace all current files!`, type: 'danger', confirmText: 'Restore' })
   if (ok) {
@@ -2496,15 +3739,8 @@ function setupAutoBackup() {
   }
 }
 
-function handleFileUpload(event) {
-  uploadFileRef.value = event.target.files[0]
-}
-
-function handleFolderUpload(event) {
-  uploadFiles.value = Array.from(event.target.files)
-}
-
 function formatSize(bytes) {
+  if (!Number.isFinite(Number(bytes)) || Number(bytes) < 0) return '-'
   if (bytes === 0) return '-'
   const units = ['B', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(1024))
@@ -2514,38 +3750,48 @@ function formatSize(bytes) {
 onMounted(async () => {
   await fetchServer()
   loadConsoleHistory()
+  await fetchFileLimits()
   await navigateTo('')
   await fetchInstalledPlugins()
   await fetchSettings()
   await fetchSftpStatus()
   await fetchBackups()
   await fetchPlayitStatus()
+  await nextTick()
+  initializeConsoleTerminal()
   if (activeTab.value === 'network') {
     await fetchNetworkStats()
   }
+  if (activeTab.value === 'tasks') {
+    await fetchTasks()
+  }
   if (activeTab.value === 'console') {
-    startConsoleRefreshLoop()
     if (server.value?.status === 'running') {
-      connectWebSocket()
+      connectConsoleStream({ replay: !consoleLines.value.length })
     } else {
-      clearConsoleHistory()
       await fetchRecentConsoleLogs()
     }
   }
+  if (activeTab.value === 'files') {
+    startFilesRefreshLoop()
+  }
+  updatePlayitClaimPolling()
   statusInterval = setInterval(async () => {
     await fetchServer()
     await fetchPlayitStatus()
     if (activeTab.value === 'network') {
       await fetchNetworkStats()
     }
+    if (activeTab.value === 'tasks') {
+      await fetchTasks()
+    }
     if (activeTab.value === 'console') {
       if (server.value?.status === 'running') {
-        if (!ws || ws.readyState === WebSocket.CLOSED) {
-          connectWebSocket({ replay: true })
-        } else if (consoleLines.value.length === 0) {
-          await fetchRecentConsoleLogs()
+        if (!hasActiveConsoleStream()) {
+          connectConsoleStream({ replay: !consoleLines.value.length })
         }
-      } else {
+      } else if (consoleConnectionState.value !== 'idle') {
+        disconnectConsoleStream()
         await fetchRecentConsoleLogs()
       }
     }
@@ -2563,14 +3809,34 @@ onMounted(async () => {
   setupAutoBackup()
 })
 
+watch(() => taskForm.action, (action) => {
+  if (action !== 'command') {
+    taskForm.command = ''
+  }
+})
+
 let statusInterval = null
 let updateCheckInterval = null
 
 onUnmounted(() => {
-  stopConsoleRefreshLoop()
-  disconnectWebSocket()
+  stopFilesRefreshLoop()
+  disconnectConsoleStream()
+  if (terminalResizeObserver) {
+    terminalResizeObserver.disconnect()
+    terminalResizeObserver = null
+  }
+  window.removeEventListener('resize', fitConsoleTerminal)
+  if (terminal) {
+    terminal.dispose()
+    terminal = null
+    terminalFitAddon = null
+  }
   if (statusInterval) {
     clearInterval(statusInterval)
+  }
+  if (playitClaimPollInterval) {
+    clearInterval(playitClaimPollInterval)
+    playitClaimPollInterval = null
   }
   if (updateCheckInterval) {
     clearInterval(updateCheckInterval)
@@ -2603,6 +3869,68 @@ onUnmounted(() => {
 .fade-leave-to {
   opacity: 0;
   transform: translateY(-10px);
+}
+
+.dqs-console-toolbar {
+  padding: 0.85rem 0.95rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+  background:
+    radial-gradient(circle at top left, rgba(45, 212, 191, 0.12), transparent 38%),
+    linear-gradient(135deg, rgba(10, 14, 24, 0.94), rgba(20, 28, 45, 0.88));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.dqs-console-toolbar-actions {
+  justify-content: flex-end;
+}
+
+.dqs-console-status-pill {
+  backdrop-filter: blur(12px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.dqs-console-action-btn {
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.dqs-console-action-btn:hover {
+  border-color: rgba(45, 212, 191, 0.28);
+  color: rgb(240 253 250);
+  background: rgba(45, 212, 191, 0.12);
+}
+
+.server-terminal {
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.35), 0 20px 50px rgba(2, 6, 23, 0.35);
+}
+
+.dqs-console-terminal {
+  background:
+    radial-gradient(circle at top, rgba(45, 212, 191, 0.08), transparent 42%),
+    linear-gradient(180deg, rgba(3, 7, 18, 0.98), rgba(2, 6, 23, 0.96));
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.server-terminal :deep(.xterm) {
+  height: 100%;
+  padding: 0.9rem 1rem;
+}
+
+.server-terminal :deep(.xterm-viewport) {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
+}
+
+.server-terminal :deep(.xterm-screen canvas) {
+  width: 100% !important;
+}
+
+@media (max-width: 640px) {
+  .dqs-console-toolbar-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 
 .tab-content {

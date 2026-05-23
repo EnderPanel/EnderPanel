@@ -5,7 +5,13 @@ import secrets
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'mcpanel.db')}"
+LEGACY_DATABASE_PATH = os.path.join(BASE_DIR, "mcpanel.db")
+DATABASE_PATH = os.path.join(BASE_DIR, "enderpanel.db")
+
+if os.path.exists(LEGACY_DATABASE_PATH) and not os.path.exists(DATABASE_PATH):
+    os.replace(LEGACY_DATABASE_PATH, DATABASE_PATH)
+
+DATABASE_URL = f"sqlite:///{DATABASE_PATH}"
 
 
 def _read_or_create_secret(path: str, env_name: str, generator) -> str:
@@ -41,6 +47,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
 SERVERS_DIR = os.path.join(BASE_DIR, "servers")
 AVATARS_DIR = os.path.join(BASE_DIR, "avatars")
+PEARLS_DIR = os.path.join(BASE_DIR, "pearls")
 
 PLAYIT_PARTNER_API_KEY = os.getenv("PLAYIT_PARTNER_API_KEY", "").strip()
 PLAYIT_VARIANT_ID = os.getenv("PLAYIT_VARIANT_ID", "").strip()
@@ -50,3 +57,4 @@ PLAYIT_SETUP_URL = "https://playit.gg/l/setup-third-party"
 PLAYIT_DASHBOARD_URL = "https://playit.gg/account/agents"
 
 os.makedirs(AVATARS_DIR, exist_ok=True)
+os.makedirs(PEARLS_DIR, exist_ok=True)
