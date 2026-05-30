@@ -61,11 +61,9 @@ jobs:
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          repository: EnderPanel/Releases
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           overwrite_files: true
-          token: ${{ secrets.RELEASES_REPO_TOKEN }}
           files: |
             enderpanel-*.tar.gz
             enderpanel-latest.tar.gz
