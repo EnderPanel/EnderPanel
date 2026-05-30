@@ -52,6 +52,8 @@ jobs:
             "$STAGE_DIR/backend/.secret_key" \
             "$STAGE_DIR/backend/.data_encryption_key" \
             "$STAGE_DIR/frontend/.env"
+          # Remove macOS quarantine attributes (harmless, prevents tar warnings)
+          find "$STAGE_DIR" -type f -exec xattr -d com.apple.quarantine {} \; 2>/dev/null || true
           find "$STAGE_DIR" -name '.DS_Store' -delete
           find "$STAGE_DIR" -name '__pycache__' -type d -prune -exec rm -rf {} +
           find "$STAGE_DIR" -name '*.pyc' -delete
