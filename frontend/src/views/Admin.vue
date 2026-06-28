@@ -275,6 +275,50 @@
           </div>
         </label>
       </div>
+      </div>
+    </div>
+
+    <!-- Integrations -->
+    <div class="glass-panel overflow-hidden hover-card mb-8">
+      <div class="p-6 border-b border-gray-200 dark:border-white/10 flex items-center justify-between">
+        <h3 class="font-bold text-lg flex items-center gap-2">
+          <svg class="w-5 h-5 text-mc-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+          Google Drive Integration
+        </h3>
+        <span v-if="gdriveStatus.linked" class="px-2 py-1 bg-green-500/20 text-green-500 rounded text-xs font-bold uppercase tracking-wider">Linked</span>
+        <span v-else class="px-2 py-1 bg-gray-500/20 text-gray-400 rounded text-xs font-bold uppercase tracking-wider">Unlinked</span>
+      </div>
+      
+      <div class="p-6">
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          Configure a Google Cloud OAuth App to allow EnderPanel to upload server backups directly to Google Drive.
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Client ID</label>
+            <input v-model="gdriveConfig.client_id" type="text" class="input-field w-full" placeholder="Enter Google Client ID" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Client Secret</label>
+            <input v-model="gdriveConfig.client_secret" type="password" class="input-field w-full" placeholder="Enter Google Client Secret" />
+          </div>
+        </div>
+
+        <div class="flex gap-4 items-center">
+          <button @click="saveGDriveConfig" :disabled="savingGDrive" class="btn-primary py-2 px-4 rounded-xl">
+            {{ savingGDrive ? 'Saving...' : 'Save Configuration' }}
+          </button>
+          
+          <button v-if="gdriveStatus.configured && !gdriveStatus.linked" @click="linkGDrive" class="px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-500 font-bold rounded-xl transition-all">
+            Link Account
+          </button>
+          
+          <button v-if="gdriveStatus.linked" @click="unlinkGDrive" class="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-500 font-bold rounded-xl transition-all">
+            Unlink Account
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Active Deployments (Servers) -->
@@ -353,7 +397,11 @@ const panelSettings = ref({
 })
 const savingUploadLimit = ref(false)
 const savingPearlSettings = ref(false)
+const gdriveConfig = ref({ client_id: '', client_secret: '' })
+const gdriveStatus = ref({ configured: false, linked: false })
+const savingGDrive = ref(false)
 const isDqsTheme = ref(false)
+
 const dockerAvailable = computed(() => stats.value.docker?.available !== false)
 const cpuCanvas = ref(null)
 const memCanvas = ref(null)
@@ -586,6 +634,51 @@ async function savePearlSettings() {
   }
 }
 
+async function fetchGDriveConfig() {
+  try {
+    const res = await axios.get('/api/gdrive/config')
+    gdriveConfig.value = res.data
+    const statusRes = await axios.get('/api/gdrive/status')
+    gdriveStatus.value = statusRes.data
+  } catch (e) {
+    console.warn('Failed to fetch GDrive config', e)
+  }
+}
+
+async function saveGDriveConfig() {
+  savingGDrive.value = true
+  try {
+    await axios.put('/api/gdrive/config', gdriveConfig.value)
+    toast?.({ title: 'Saved', message: 'Google Drive configuration updated.', type: 'success' })
+    fetchGDriveConfig()
+  } catch (e) {
+    toast?.({ title: 'Error', message: 'Failed to save Google Drive config', type: 'error' })
+  } finally {
+    savingGDrive.value = false
+  }
+}
+
+async function linkGDrive() {
+  try {
+    const redirect_uri = window.location.origin + '/admin/gdrive-callback'
+    const res = await axios.post('/api/gdrive/auth-url', { redirect_uri })
+    window.location.href = res.data.url
+  } catch (e) {
+    toast?.({ title: 'Error', message: 'Failed to get auth URL', type: 'error' })
+  }
+}
+
+async function unlinkGDrive() {
+  if (!confirm('Are you sure you want to unlink Google Drive?')) return
+  try {
+    await axios.post('/api/gdrive/unlink')
+    toast?.({ title: 'Unlinked', message: 'Google Drive has been unlinked.', type: 'success' })
+    fetchGDriveConfig()
+  } catch (e) {
+    toast?.({ title: 'Error', message: 'Failed to unlink Google Drive', type: 'error' })
+  }
+}
+
 async function installUpdate() {
   updating.value = true
   try {
@@ -640,7 +733,8 @@ onMounted(() => {
   fetchStats()
   checkUpdate()
   fetchPanelSettings()
-  interval = setInterval(fetchStats, 5000)
+  fetchGDriveConfig()
+  interval = setInterval(fetchStats, 15000)
 
   resizeHandler = () => {
     syncAdminThemeState()

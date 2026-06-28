@@ -7,6 +7,7 @@ import ServerView from '../views/ServerView.vue'
 import Users from '../views/Users.vue'
 import Admin from '../views/Admin.vue'
 import Themes from '../views/Themes.vue'
+import GDriveCallback from '../views/GDriveCallback.vue'
 import { useAuthStore } from '../stores/auth'
 
 const routes = [
@@ -19,6 +20,7 @@ const routes = [
   { path: '/server/:id', component: ServerView, meta: { requiresAuth: true } },
   { path: '/users', component: Users, meta: { requiresAuth: true, requiresAdmin: true } },
   { path: '/admin', component: Admin, meta: { requiresAuth: true, requiresAdmin: true } },
+  { path: '/admin/gdrive-callback', component: GDriveCallback, meta: { requiresAuth: true, requiresAdmin: true } },
 ]
 
 const router = createRouter({

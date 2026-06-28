@@ -865,6 +865,12 @@
                 </svg>
                 Download
               </button>
+              <button @click="uploadToDrive(backup.filename)" class="bg-blue-100 dark:bg-blue-500/20 hover:bg-blue-200 dark:hover:bg-blue-500/30 text-blue-700 dark:text-blue-400 px-3 py-1.5 rounded-lg text-xs transition flex items-center gap-1">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                </svg>
+                Drive
+              </button>
               <button @click="restoreBackup(backup.filename)" :disabled="server?.status === 'running'"
                 class="bg-yellow-100 dark:bg-yellow-500/20 hover:bg-yellow-200 dark:hover:bg-yellow-500/30 text-yellow-700 dark:text-yellow-400 disabled:opacity-50 px-3 py-1.5 rounded-lg text-xs transition">Restore</button>
               <button @click="deleteBackup(backup.filename)" class="bg-red-100 dark:bg-red-500/20 hover:bg-red-200 dark:hover:bg-red-500/30 text-red-700 dark:text-red-400 px-3 py-1.5 rounded-lg text-xs transition">Delete</button>
@@ -3692,6 +3698,16 @@ async function deleteBackup(filename) {
 
 function downloadBackup(filename) {
   window.open(`/api/servers/${serverId}/files/backups/${filename}/download`, '_blank', 'noopener')
+}
+
+async function uploadToDrive(filename) {
+  try {
+    toast?.({ title: 'Uploading', message: 'Starting Google Drive upload...', type: 'info' })
+    const res = await axios.post(`/api/servers/${serverId}/backups/${filename}/upload-drive`)
+    toast?.({ title: 'Upload Started', message: res.data.message || 'Check your Drive in a few minutes.', type: 'success' })
+  } catch (e) {
+    toast?.({ title: 'Upload Failed', message: e.response?.data?.detail || 'Failed to start upload. Is Google Drive linked in Admin settings?', type: 'error' })
+  }
 }
 
 function formatInterval(ms) {
