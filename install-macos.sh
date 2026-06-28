@@ -144,8 +144,11 @@ python3 -m pip install --break-system-packages -r requirements.txt 2>/dev/null |
 sudo python3 -m pip install --break-system-packages -r requirements.txt
 
 echo ""
-echo "Building Docker image..."
+echo "Building Docker images..."
 docker build -t mc-panel-server:latest .
+docker build -t mc-panel-server:java11 -f Dockerfile.java11 .
+docker build -t mc-panel-server:java17 -f Dockerfile.java17 .
+docker build -t mc-panel-server:java25 -f Dockerfile.java25 .
 
 echo ""
 echo "=== Installation Complete ==="

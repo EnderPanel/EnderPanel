@@ -637,166 +637,184 @@
 
       <div v-show="activeTab === 'playit'">
         <div class="space-y-6">
-          <div class="dqs-playit-intro rounded-2xl border border-sky-200/70 dark:border-sky-500/20 bg-gradient-to-br from-sky-50/80 via-cyan-50/60 to-white dark:from-sky-500/15 dark:via-cyan-500/10 dark:to-sky-500/5 p-6 overflow-hidden">
-            <div class="flex items-start gap-3 w-full">
-                <div class="w-10 h-10 rounded-xl bg-sky-100 dark:bg-sky-500/20 flex items-center justify-center text-sky-600 dark:text-sky-300 flex-shrink-0">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4H8l5-8v4h4l-4 8z"/>
-                  </svg>
-                </div>
-                <div class="space-y-2 flex-1 min-w-0">
-                  <div class="dqs-playit-title-row flex flex-wrap items-center gap-2">
-                    <h3 class="text-lg font-semibold">Playit Agent</h3>
+          
+          <!-- Dynamic Header -->
+          <div class="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-2xl p-8">
+            <div class="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-transparent pointer-events-none"></div>
+            
+            <div class="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+              <div class="flex items-center gap-4">
+                <div class="relative">
+                  <div class="absolute -inset-1 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 opacity-50 blur"></div>
+                  <div class="relative w-14 h-14 rounded-2xl bg-gray-900 border border-white/20 flex items-center justify-center text-white shadow-inner">
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4H8l5-8v4h4l-4 8z"/>
+                    </svg>
                   </div>
+                </div>
+                <div>
+                  <h3 class="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">Playit.gg Integration</h3>
+                  <p class="text-gray-400 mt-1">Expose your local server to the internet without port forwarding.</p>
                 </div>
               </div>
+              
+              <div class="flex items-center gap-3">
+                <button @click="syncPlayitStatus" :disabled="playitBusy" 
+                  class="group relative inline-flex items-center justify-center gap-2 rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm font-medium text-white transition-all hover:bg-white/10 hover:-translate-y-0.5 hover:shadow-lg disabled:opacity-50">
+                  <svg class="w-4 h-4 transition-transform group-hover:rotate-180" :class="{'animate-spin': playitBusy}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Refresh
+                </button>
+                <button @click="enablePlayit" :disabled="playitBusy"
+                  class="relative inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 px-5 py-2.5 text-sm font-medium text-white shadow-lg shadow-indigo-500/25 transition-all hover:-translate-y-0.5 hover:shadow-indigo-500/40 disabled:opacity-50 border border-white/10">
+                  {{ playitBusy ? 'Working...' : (playitStatus.enabled ? 'Restart Agent' : 'Enable Playit') }}
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div class="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+          <div class="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+            
+            <!-- Left Column: Status & Steps -->
             <div class="space-y-6">
-              <div class="bg-gray-50 dark:bg-white/5 rounded-2xl border border-gray-200 dark:border-white/10 p-6">
-                <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <h4 class="font-semibold text-lg">Enable and Claim Playit</h4>
-                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                      If Playit says the agent is offline during the claim stay on the page after the claim is done it will automatically make a tunnel and print it in the panel
-                    </p>
-                  </div>
-                  <div class="flex flex-col sm:flex-row gap-2">
-                    <button @click="enablePlayit" :disabled="playitBusy"
-                      class="btn-success text-sm text-center disabled:opacity-50">
-                      {{ playitBusy ? 'Working...' : (playitStatus.enabled ? 'Refresh Playit' : 'Enable Playit') }}
-                    </button>
-                    <button v-if="playitStatus.enabled" @click="disconnectPlayit" :disabled="playitBusy"
-                      class="bg-red-100 dark:bg-red-500/20 hover:bg-red-200 dark:hover:bg-red-500/30 text-red-700 dark:text-red-300 px-4 py-2 rounded-xl text-sm transition disabled:opacity-50">
-                      Disconnect
-                    </button>
-                  </div>
-                </div>
-
-                <div class="grid gap-4 mt-5 lg:grid-cols-[0.9fr_1.1fr]">
-                  <div class="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-black/10 p-4">
-                    <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Quick steps</p>
-                    <div class="mt-3 space-y-3 text-sm">
-                      <div class="flex gap-3">
-                        <span class="w-6 h-6 rounded-full bg-sky-100 dark:bg-sky-500/20 text-sky-700 dark:text-sky-300 flex items-center justify-center text-xs font-semibold flex-shrink-0">1</span>
-                        <p>Click <span class="font-medium">Enable Playit</span> while the server is running, or enable it first and then start the server.</p>
-                      </div>
-                      <div class="flex gap-3">
-                        <span class="w-6 h-6 rounded-full bg-sky-100 dark:bg-sky-500/20 text-sky-700 dark:text-sky-300 flex items-center justify-center text-xs font-semibold flex-shrink-0">2</span>
-                        <p>If this is the first launch, Playit prints a claim link. Open it and add the agent to your Playit account.</p>
-                      </div>
-                      <div class="flex gap-3">
-                        <span class="w-6 h-6 rounded-full bg-sky-100 dark:bg-sky-500/20 text-sky-700 dark:text-sky-300 flex items-center justify-center text-xs font-semibold flex-shrink-0">3</span>
-                        <p>Once claimed, EnderPanel will keep syncing the agent and show the public Playit address here.</p>
-                      </div>
+              
+              <!-- Setup Progress Stepper -->
+              <div class="rounded-2xl border border-white/5 bg-white/5 backdrop-blur-md p-6 shadow-xl">
+                <h4 class="text-sm uppercase tracking-widest text-gray-400 font-semibold mb-6 flex items-center justify-between">
+                  <span>Setup Progress</span>
+                  <span class="flex h-2 w-2">
+                    <span class="animate-ping absolute inline-flex h-2 w-2 rounded-full opacity-75" :class="playitBusy ? 'bg-indigo-400' : (playitStatus.tunnel_created ? 'bg-emerald-400' : 'bg-yellow-400')"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2" :class="playitBusy ? 'bg-indigo-500' : (playitStatus.tunnel_created ? 'bg-emerald-500' : 'bg-yellow-500')"></span>
+                  </span>
+                </h4>
+                
+                <div class="flex flex-col md:flex-row gap-4 mt-2">
+                  
+                  <!-- Step 1 -->
+                  <div class="flex-1 p-5 rounded-2xl border bg-white/5 backdrop-blur-sm transition-all hover:bg-white/10 text-center relative overflow-hidden"
+                    :class="playitStatus.enabled ? 'border-emerald-500/30' : 'border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.1)]'">
+                    <div class="mx-auto flex items-center justify-center w-10 h-10 rounded-full border-2 mb-4 transition-colors z-10 relative"
+                      :class="playitStatus.enabled ? 'border-emerald-500 bg-gray-900 shadow-[0_0_15px_rgba(16,185,129,0.4)]' : 'border-indigo-500 bg-gray-900 text-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.4)]'">
+                      <svg v-if="playitStatus.enabled" class="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                      <span v-else class="font-bold">1</span>
                     </div>
+                    <h5 class="font-semibold mb-2 transition-colors relative z-10" :class="playitStatus.enabled ? 'text-emerald-400' : 'text-indigo-300'">Enable Agent</h5>
+                    <p class="text-sm text-gray-400 relative z-10">Click Enable Playit to start the sidecar agent container.</p>
                   </div>
-
-                  <div class="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-black/10 p-4 space-y-4">
-                    <div v-if="playitStatus.tunnel_create_detail" class="rounded-xl border border-yellow-200 dark:border-yellow-500/20 bg-yellow-50 dark:bg-yellow-500/10 p-4 text-sm text-yellow-700 dark:text-yellow-300">
-                      {{ playitStatus.tunnel_create_detail }}
+                  
+                  <!-- Step 2 -->
+                  <div class="flex-1 p-5 rounded-2xl border bg-white/5 backdrop-blur-sm transition-all hover:bg-white/10 text-center relative overflow-hidden"
+                    :class="playitStatus.linked ? 'border-emerald-500/30' : (playitStatus.enabled ? 'border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.1)]' : 'border-white/5 opacity-70')">
+                    <div class="mx-auto flex items-center justify-center w-10 h-10 rounded-full border-2 mb-4 transition-colors z-10 relative" 
+                      :class="playitStatus.linked ? 'border-emerald-500 bg-gray-900 shadow-[0_0_15px_rgba(16,185,129,0.4)]' : (playitStatus.enabled ? 'border-indigo-500 bg-gray-900 text-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.4)]' : 'border-white/20 bg-gray-900 text-gray-500')">
+                      <svg v-if="playitStatus.linked" class="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                      <span v-else class="font-bold">2</span>
                     </div>
-
-                    <div v-if="!playitStatus.linked && playitStatus.claim_url" class="rounded-xl border border-sky-200 dark:border-sky-500/20 bg-sky-50 dark:bg-sky-500/10 p-4">
-                      <p class="text-xs uppercase tracking-wide text-sky-700 dark:text-sky-300 mb-1">Claim link</p>
-                      <button @click="openPlayitClaimLink" type="button" class="font-mono text-left text-sm break-all text-sky-900 dark:text-sky-100 underline">
+                    <h5 class="font-semibold mb-2 transition-colors relative z-10" :class="playitStatus.linked ? 'text-emerald-400' : (playitStatus.enabled ? 'text-indigo-300' : 'text-gray-500')">Claim Agent</h5>
+                    <div v-if="!playitStatus.linked && playitStatus.claim_url" class="mt-2 p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 relative z-10 mx-auto max-w-[90%]">
+                      <button @click="openPlayitClaimLink" type="button" class="w-full font-mono text-xs break-all text-indigo-300 hover:text-indigo-200 transition-colors underline decoration-indigo-500/50 underline-offset-2">
                         {{ playitStatus.claim_url }}
                       </button>
                     </div>
-
-                    <div class="space-y-3">
-                      <a :href="playitStatus.dashboard_url" target="_blank" rel="noopener noreferrer" class="btn-primary w-full text-center">
-                        Open Playit Dashboard
-                      </a>
-                      <button @click="syncPlayitStatus" :disabled="playitBusy" class="w-full bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 py-3 rounded-xl transition disabled:opacity-50">
-                        Refresh Status
-                      </button>
-                    </div>
+                    <p v-else class="text-sm text-gray-400 relative z-10">Open the claim link provided after enabling.</p>
                   </div>
+
+                  <!-- Step 3 -->
+                  <div class="flex-1 p-5 rounded-2xl border bg-white/5 backdrop-blur-sm transition-all hover:bg-white/10 text-center relative overflow-hidden"
+                    :class="playitStatus.tunnel_created ? 'border-emerald-500/30' : (playitStatus.linked ? 'border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.1)]' : 'border-white/5 opacity-70')">
+                    <div class="mx-auto flex items-center justify-center w-10 h-10 rounded-full border-2 mb-4 transition-colors z-10 relative"
+                      :class="playitStatus.tunnel_created ? 'border-emerald-500 bg-gray-900 shadow-[0_0_15px_rgba(16,185,129,0.4)]' : (playitStatus.linked ? 'border-indigo-500 bg-gray-900 text-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.4)] animate-pulse' : 'border-white/20 bg-gray-900 text-gray-500')">
+                      <svg v-if="playitStatus.tunnel_created" class="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                      <span v-else class="font-bold">3</span>
+                    </div>
+                    <h5 class="font-semibold mb-2 transition-colors relative z-10" :class="playitStatus.tunnel_created ? 'text-emerald-400' : (playitStatus.linked ? 'text-indigo-300' : 'text-gray-500')">Tunnel Ready</h5>
+                    <p v-if="playitStatus.tunnel_create_detail" class="text-sm text-yellow-400 relative z-10 mb-2">{{ playitStatus.tunnel_create_detail }}</p>
+                    <p v-else class="text-sm text-gray-400 relative z-10">Wait for Playit to assign a public address.</p>
+                  </div>
+
                 </div>
               </div>
+
             </div>
 
+            <!-- Right Column: Address & Details -->
             <div class="space-y-6">
-              <div class="bg-gray-50 dark:bg-white/5 rounded-2xl border border-gray-200 dark:border-white/10 p-6">
-                <h4 class="font-semibold text-lg mb-4">Current Snapshot</h4>
-                <div class="grid gap-3">
-                  <div class="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-black/10 px-4 py-3 flex items-center justify-between gap-3">
-                    <span class="text-sm text-gray-500 dark:text-gray-400">Playit enabled</span>
-                    <span class="text-sm font-medium" :class="playitStatus.enabled ? 'text-emerald-600 dark:text-emerald-300' : 'text-gray-700 dark:text-gray-200'">
-                      {{ playitStatus.enabled ? 'Enabled' : 'Disabled' }}
-                    </span>
-                  </div>
-                  <div class="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-black/10 px-4 py-3 flex items-center justify-between gap-3">
-                    <span class="text-sm text-gray-500 dark:text-gray-400">Agent status</span>
-                    <span class="text-sm font-medium" :class="playitStatus.agent_running ? 'text-emerald-600 dark:text-emerald-300' : 'text-gray-700 dark:text-gray-200'">
-                      {{ playitStatus.agent_running ? 'Running' : 'Stopped' }}
-                    </span>
-                  </div>
-                  <div class="rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-black/10 px-4 py-3 flex items-center justify-between gap-3">
-                    <span class="text-sm text-gray-500 dark:text-gray-400">Linked account</span>
-                    <span class="text-sm font-mono text-gray-800 dark:text-gray-100 break-all text-right">
-                      {{ playitStatus.linked ? (playitStatus.agent_secret_masked || 'Claimed') : 'Not claimed yet' }}
-                    </span>
-                  </div>
-                </div>
-              </div>
+              
+              <!-- Public Address Card -->
+              <div class="rounded-2xl border bg-white/5 backdrop-blur-md p-6 shadow-xl transition-all duration-500 relative overflow-hidden"
+                :class="playitStatus.saved_domain ? 'border-emerald-500/30 shadow-emerald-500/10' : 'border-white/5'">
+                
+                <div v-if="playitStatus.saved_domain" class="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 blur-3xl -mr-10 -mt-10 rounded-full pointer-events-none"></div>
 
-              <div class="bg-gray-50 dark:bg-white/5 rounded-2xl border border-gray-200 dark:border-white/10 p-6">
-                <h4 class="font-semibold text-lg mb-4">Public Address</h4>
-                <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                  Once the agent is claimed and the tunnel is ready, this is the Playit address players should use.
-                </p>
-                <div v-if="playitStatus.saved_domain" class="mt-4 rounded-xl border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 p-4 space-y-3">
-                  <div class="flex items-start justify-between gap-3">
-                    <div>
-                      <p class="text-xs uppercase tracking-wide text-emerald-700 dark:text-emerald-300 mb-1">Join address</p>
-                      <p class="font-mono text-base sm:text-lg break-all text-emerald-900 dark:text-emerald-100">{{ playitStatus.saved_domain }}</p>
-                    </div>
-                    <button
-                      @click="copyPlayitAddress"
-                      class="flex-shrink-0 rounded-lg border border-emerald-300/70 dark:border-emerald-400/20 bg-white/80 dark:bg-emerald-500/10 px-3 py-1.5 text-sm text-emerald-700 dark:text-emerald-200 transition hover:bg-white dark:hover:bg-emerald-500/20"
-                    >
+                <div class="flex items-center justify-between mb-4">
+                  <h4 class="text-sm uppercase tracking-widest text-gray-400 font-semibold">Public Address</h4>
+                  <span v-if="playitStatus.saved_domain" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Online
+                  </span>
+                </div>
+                
+                <div v-if="playitStatus.saved_domain" class="group relative">
+                  <div class="absolute -inset-0.5 bg-gradient-to-r from-emerald-500/30 to-teal-500/30 rounded-xl blur opacity-30 group-hover:opacity-50 transition duration-500"></div>
+                  <div class="relative flex flex-col sm:flex-row items-center justify-between gap-4 rounded-xl bg-gray-900 border border-emerald-500/30 p-4">
+                    <p class="font-mono text-lg break-all text-emerald-300 font-medium">{{ playitStatus.saved_domain }}</p>
+                    <button @click="copyPlayitAddress" 
+                      class="flex-shrink-0 flex items-center gap-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 px-4 py-2 text-sm font-medium text-emerald-400 transition-colors border border-emerald-500/20">
+                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
                       Copy
                     </button>
                   </div>
-                  <p class="text-sm text-emerald-800/80 dark:text-emerald-200/80">
-                    Players can join with this address.
-                  </p>
                 </div>
-                <div v-else class="mt-4 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-black/10 p-4">
-                  <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Status</p>
-                  <p class="text-sm text-gray-700 dark:text-gray-200">
-                    {{ playitStatus.linked
-                      ? (playitStatus.tunnel_created ? 'The tunnel is ready to share.' : (playitStatus.tunnel_create_detail || 'Waiting for Playit to create a tunnel for this server.'))
-                      : (playitStatus.claim_url ? 'Claim the agent first, then refresh this page.' : 'Enable Playit and wait for the claim link to appear.') }}
+                <div v-else class="rounded-xl border border-white/5 bg-gray-900/50 p-6 text-center">
+                  <div class="mx-auto w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-3">
+                    <svg class="w-6 h-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                    </svg>
+                  </div>
+                  <p class="text-sm text-gray-400">
+                    {{ playitStatus.linked 
+                      ? (playitStatus.tunnel_create_detail || 'Waiting for Playit to assign an address...') 
+                      : 'Complete setup to get your address.' }}
                   </p>
                 </div>
               </div>
 
-              <div class="bg-gray-50 dark:bg-white/5 rounded-2xl border border-gray-200 dark:border-white/10 p-6">
-                <h4 class="font-semibold text-lg mb-4">How It Works</h4>
-                <div class="space-y-3 text-sm text-gray-600 dark:text-gray-300">
-                  <div class="rounded-xl bg-white dark:bg-black/10 border border-gray-200 dark:border-white/10 px-4 py-3">
-                    Each server runs its own Playit sidecar container attached to the Minecraft server container.
+              <!-- Snapshot Details -->
+              <div class="rounded-2xl border border-white/5 bg-white/5 backdrop-blur-md p-6 shadow-xl">
+                <h4 class="text-sm uppercase tracking-widest text-gray-400 font-semibold mb-4">Diagnostics</h4>
+                
+                <div class="space-y-3">
+                  <div class="flex items-center justify-between p-3 rounded-xl bg-gray-900/40 border border-white/5">
+                    <span class="text-sm text-gray-400">Agent Process</span>
+                    <span class="text-sm font-medium px-2 py-1 rounded-md" :class="playitStatus.agent_running ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'">
+                      {{ playitStatus.agent_running ? 'Running' : 'Stopped' }}
+                    </span>
                   </div>
-                  <div class="rounded-xl bg-white dark:bg-black/10 border border-gray-200 dark:border-white/10 px-4 py-3">
-                    On the first launch, Playit prints a claim link in the agent logs. Claim that agent on the Playit website.
-                  </div>
-                  <div class="rounded-xl bg-white dark:bg-black/10 border border-gray-200 dark:border-white/10 px-4 py-3">
-                    After the agent is claimed, EnderPanel reads the saved Playit secret from the server folder and can sync the tunnel automatically.
-                  </div>
-                  <div class="rounded-xl bg-white dark:bg-black/10 border border-gray-200 dark:border-white/10 px-4 py-3">
-                    Disconnecting Playit removes the saved Playit config for this server and stops its agent container.
+                  <div class="flex items-center justify-between p-3 rounded-xl bg-gray-900/40 border border-white/5">
+                    <span class="text-sm text-gray-400">Secret Token</span>
+                    <span class="text-sm font-mono text-gray-300">
+                      {{ playitStatus.linked ? (playitStatus.agent_secret_masked || '••••••••') : 'None' }}
+                    </span>
                   </div>
                 </div>
+
+                <div class="mt-6 flex flex-col sm:flex-row gap-3 pt-6 border-t border-white/10">
+                  <a :href="playitStatus.dashboard_url" target="_blank" rel="noopener noreferrer" 
+                    class="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-white/5 hover:bg-white/10 px-4 py-2.5 text-sm font-medium text-white transition-colors border border-white/10">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                    Web Dashboard
+                  </a>
+                  <button v-if="playitStatus.enabled" @click="disconnectPlayit" :disabled="playitBusy"
+                    class="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 px-4 py-2.5 text-sm font-medium transition-colors border border-red-500/20 disabled:opacity-50">
+                    Disconnect
+                  </button>
+                </div>
               </div>
+
             </div>
           </div>
         </div>
       </div>
-
       <div v-show="activeTab === 'backups'">
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <h3 class="font-semibold">Server Backups</h3>

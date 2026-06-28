@@ -145,9 +145,14 @@ def has_accepted_eula(sid: int, name: str) -> bool:
 def java_version_for_mc(mc_version: str) -> int:
     try:
         parts = mc_version.split(".")
+        major = int(parts[0]) if parts else 0
         minor = int(parts[1]) if len(parts) > 1 else 0
         patch = int(parts[2]) if len(parts) > 2 else 0
     except (ValueError, IndexError):
+        return 21
+    if major >= 26:
+        return 25
+    if major != 1:
         return 21
     if minor >= 26:
         return 25
@@ -259,6 +264,10 @@ def extract_neoforge_mc_version(value: str) -> str | None:
 def unique_versions_desc(values: list[str]) -> list[str]:
     deduped = {value for value in values if value}
     return sorted(deduped, key=version_sort_key, reverse=True)
+
+
+def is_stable_minecraft_version(value: str) -> bool:
+    return bool(re.fullmatch(r"\d+(?:\.\d+){1,2}", value))
 
 
 def normalize_pearl_text(value: Any, default: str = "") -> str:
@@ -862,12 +871,18 @@ async def download_jar(stype: str, ver: str, path: str) -> tuple[bool, str | Non
     try:
         async with httpx.AsyncClient(timeout=300) as c:
             if stype == "paper":
-                r = await c.get(f"https://api.papermc.io/v2/projects/paper/versions/{ver}/builds")
-                b = r.json().get("builds", [])
-                if not b: return False, f"No Paper builds found for {ver}."
-                n = b[-1]["downloads"]["application"]["name"]
-                r = await c.get(f"https://api.papermc.io/v2/projects/paper/versions/{ver}/builds/{b[-1]['build']}/downloads/{n}")
-                with open(jar, "wb") as f: f.write(r.content)
+                r = await c.get(f"https://fill.papermc.io/v3/projects/paper/versions/{ver}/builds")
+                builds = r.json()
+                if not isinstance(builds, list) or not builds:
+                    return False, f"No Paper builds found for {ver}."
+                build = next((item for item in builds if item.get("channel") == "STABLE"), builds[0])
+                download = ((build.get("downloads") or {}).get("server:default") or {})
+                download_url = download.get("url")
+                if not download_url:
+                    return False, f"Paper build metadata for {ver} did not include a server download."
+                r = await c.get(download_url)
+                with open(jar, "wb") as f:
+                    f.write(r.content)
                 return True, None
             elif stype == "vanilla":
                 r = await c.get("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json")
@@ -1277,10 +1292,19 @@ async def get_versions(server_type: str):
     try:
         async with httpx.AsyncClient(timeout=30) as c:
             if server_type == "paper":
-                r = await c.get("https://api.papermc.io/v2/projects/paper")
+                r = await c.get("https://fill.papermc.io/v3/projects/paper")
                 data = r.json()
-                versions = data.get("versions", [])
-                versions.reverse()
+                version_groups = data.get("versions", {})
+                collected: list[str] = []
+                if isinstance(version_groups, dict):
+                    for group_versions in version_groups.values():
+                        if isinstance(group_versions, list):
+                            collected.extend(
+                                version
+                                for version in group_versions
+                                if isinstance(version, str) and is_stable_minecraft_version(version)
+                            )
+                versions = unique_versions_desc(collected)
             elif server_type == "vanilla":
                 r = await c.get("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json")
                 data = r.json()

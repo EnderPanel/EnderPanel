@@ -263,6 +263,7 @@ def find_matching_tunnel(tunnels, tunnel_id: str | None, server_port: int):
 
 
 def call_agent_api(secret_key: str, path: str, body: dict | None = None) -> dict:
+    import json as _json
     try:
         with httpx.Client(timeout=20) as client:
             response = client.post(
@@ -274,6 +275,8 @@ def call_agent_api(secret_key: str, path: str, body: dict | None = None) -> dict
                 json=body or {},
             )
             text = response.text
+            if response.status_code >= 400:
+                logger.warning("playit agent api %s returned %s: %s (body=%s)", path, response.status_code, text, _json.dumps(body or {}, default=str)[:500])
     except httpx.HTTPError as exc:
         return {"ok": False, "detail": f"Failed to contact Playit agent API: {exc}"}
     try:
@@ -284,7 +287,7 @@ def call_agent_api(secret_key: str, path: str, body: dict | None = None) -> dict
     if response.status_code >= 400:
         return {
             "ok": False,
-            "detail": f"Playit agent API request failed with status {response.status_code}.",
+            "detail": f"Playit agent API request failed with status {response.status_code}. Details: {parsed}",
             "parsed": parsed,
         }
 
@@ -363,11 +366,11 @@ def claim_status_message(status: str | None) -> str | None:
 def ensure_playit_claim(server: Server) -> tuple[str | None, str | None, str | None, str | None]:
     stale_errors = {"InvalidCode", "CodeExpired", "CodeNotFound"}
 
-    for _ in range(2):
-        claim_code = read_playit_claim_code(server)
-        if not claim_code:
-            claim_code = write_playit_claim_code(server, generate_playit_claim_code())
+    claim_code = read_playit_claim_code(server)
+    if not claim_code:
+        claim_code = write_playit_claim_code(server, generate_playit_claim_code())
 
+    for _ in range(2):
         claim_url = build_playit_claim_url(claim_code)
         setup = call_public_api(
             "/claim/setup",
@@ -385,10 +388,10 @@ def ensure_playit_claim(server: Server) -> tuple[str | None, str | None, str | N
         detail = str(setup.get("detail") or "")
         if detail in stale_errors:
             clear_playit_claim_code(server)
+            claim_code = write_playit_claim_code(server, generate_playit_claim_code())
             continue
         return claim_code, claim_url, None, detail or "Could not prepare a Playit claim link."
 
-    claim_code = write_playit_claim_code(server, generate_playit_claim_code())
     return claim_code, build_playit_claim_url(claim_code), None, "Generated a new Playit claim link."
 
 
@@ -435,22 +438,27 @@ def resolve_playit_secret(server: Server) -> tuple[str | None, str | None, str |
 
 def run_playit_claim_watcher(server_id: int) -> None:
     started_at = time.time()
+    logger.info("Playit claim watcher started for server %s", server_id)
     try:
         while time.time() - started_at < PLAYIT_CLAIM_POLL_TIMEOUT_SECONDS:
             db = SessionLocal()
             try:
                 server = db.query(Server).filter(Server.id == server_id).first()
                 if not server or not server.playit_enabled:
+                    logger.info("Playit claim watcher stopping for server %s: server not found or playit disabled", server_id)
                     return
 
                 secret = read_playit_secret_from_disk(server)
                 if not secret:
-                    secret, _, _ = resolve_playit_secret(server)
+                    secret, claim_url, claim_detail = resolve_playit_secret(server)
+                    if not secret:
+                        logger.debug("Playit claim watcher server %s: no secret yet, detail=%s", server_id, claim_detail)
 
                 if not secret:
                     time.sleep(PLAYIT_CLAIM_POLL_SECONDS)
                     continue
 
+                logger.info("Playit claim watcher server %s: secret obtained, starting container", server_id)
                 if server.status == "running":
                     try:
                         start_playit_container(server)
@@ -459,6 +467,7 @@ def run_playit_claim_watcher(server_id: int) -> None:
                             server.playit_tunnel_id = tunnel_id
                             server.playit_domain = domain
                             db.commit()
+                            logger.info("Playit claim watcher server %s: tunnel created, domain=%s", server_id, domain)
                     except Exception:
                         logger.exception("Failed to finish Playit claim watcher for server %s", server_id)
                 return
@@ -469,6 +478,7 @@ def run_playit_claim_watcher(server_id: int) -> None:
     finally:
         with claim_watch_lock:
             claim_watch_threads.pop(server_id, None)
+        logger.info("Playit claim watcher stopped for server %s", server_id)
 
 
 def spawn_playit_claim_watcher(server_id: int) -> None:
@@ -516,9 +526,9 @@ def ensure_playit_tunnel(server: Server, secret_key: str) -> tuple[str | None, s
                 return server.playit_tunnel_id, domain, None
         return server.playit_tunnel_id, server.playit_domain, None
 
-    legacy_create = call_agent_api(
+    v1_create = call_agent_api(
         secret_key,
-        "/tunnels/create",
+        "/v1/tunnels/create",
         {
             "name": f"EnderPanel - {server.name}"[:60],
             "tunnel_type": "minecraft-java",
@@ -533,41 +543,37 @@ def ensure_playit_tunnel(server: Server, secret_key: str) -> tuple[str | None, s
                 },
             },
             "enabled": True,
-            "alloc": None,
-            "firewall_id": None,
-            "proxy_protocol": None,
         },
     )
 
-    tunnel_result = legacy_create
-    if not legacy_create.get("ok"):
-        v1_create = call_agent_api(
+    tunnel_result = v1_create
+    if not v1_create.get("ok"):
+        legacy_create = call_agent_api(
             secret_key,
-            "/v1/tunnels/create",
+            "/tunnels/create",
             {
-                "ports": {"type": "tunnel-type", "details": "minecraft-java"},
+                "name": f"EnderPanel - {server.name}"[:60],
+                "tunnel_type": "minecraft-java",
+                "port_type": "tcp",
+                "port_count": 1,
                 "origin": {
                     "type": "agent",
                     "data": {
                         "agent_id": resolved_agent_id,
-                        "config": {
-                            "fields": [
-                                {"name": "local_ip", "value": "127.0.0.1"},
-                                {"name": "local_port", "value": str(server.port)},
-                            ]
-                        },
+                        "local_ip": "127.0.0.1",
+                        "local_port": server.port,
                     },
                 },
                 "enabled": True,
                 "alloc": None,
-                "name": f"EnderPanel - {server.name}"[:60],
                 "firewall_id": None,
+                "proxy_protocol": None,
             },
         )
-        if v1_create.get("ok"):
-            tunnel_result = v1_create
+        if legacy_create.get("ok"):
+            tunnel_result = legacy_create
         else:
-            return None, None, f"legacy: {legacy_create.get('detail')}; v1: {v1_create.get('detail')}"
+            return None, None, f"v1: {v1_create.get('detail')}; legacy: {legacy_create.get('detail')}"
 
     tunnel_id = get_object_id(tunnel_result.get("data"))
     domain = ""
@@ -603,8 +609,7 @@ def start_playit_container(server: Server) -> None:
         detach=True,
         network_mode=f"container:{server_container_name(server.id)}",
         restart_policy={"Name": "unless-stopped"},
-        entrypoint=["/usr/local/bin/playit"],
-        command=["-s", "--secret_path", "/etc/playit/playit.toml", "--platform_docker", "start"],
+        environment={"SECRET_KEY": read_playit_secret_from_disk(server)},
         volumes={config_dir: {"bind": "/etc/playit", "mode": "rw"}},
         labels={"enderpanel.playit": "true", "enderpanel.server_id": str(server.id)},
     )
@@ -655,7 +660,13 @@ def get_playit_runtime_status(
 ):
     server = get_server_for_user(server_id, db, current_user)
     payload = build_payload(server)
-    if server.playit_enabled and read_playit_secret_from_disk(server):
+    secret = read_playit_secret_from_disk(server)
+    if server.playit_enabled and secret:
+        if server.status == "running" and not playit_container_running(server.id):
+            try:
+                start_playit_container(server)
+            except Exception:
+                logger.debug("Could not start playit container for server %s on status check", server_id)
         tunnel_id, domain, detail = refresh_playit_tunnel_state(server)
         if tunnel_id:
             server.playit_tunnel_id = tunnel_id
@@ -750,10 +761,11 @@ def sync_playit_runtime(
 
     if server.status == "running":
         if secret:
-            try:
-                start_playit_container(server)
-            except Exception as exc:
-                raise HTTPException(status_code=500, detail=f"Failed to sync local Playit agent: {exc}") from exc
+            if not playit_container_running(server.id):
+                try:
+                    start_playit_container(server)
+                except Exception as exc:
+                    raise HTTPException(status_code=500, detail=f"Failed to sync local Playit agent: {exc}") from exc
         else:
             stop_playit_container(server.id)
     else:
