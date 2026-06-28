@@ -603,8 +603,7 @@ def start_playit_container(server: Server) -> None:
         detach=True,
         network_mode=f"container:{server_container_name(server.id)}",
         restart_policy={"Name": "unless-stopped"},
-        entrypoint=["/usr/local/bin/playit"],
-        command=["-s", "--secret_path", "/etc/playit/playit.toml", "--platform_docker", "start"],
+        environment={"SECRET_KEY": read_playit_secret_from_disk(server)},
         volumes={config_dir: {"bind": "/etc/playit", "mode": "rw"}},
         labels={"enderpanel.playit": "true", "enderpanel.server_id": str(server.id)},
     )

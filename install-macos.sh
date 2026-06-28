@@ -162,9 +162,12 @@ echo "Building frontend..."
 npm run build
 
 echo ""
-echo "Building Docker image..."
+echo "Building Docker images..."
 cd "$INSTALL_DIR/backend"
 docker build -t mc-panel-server:latest .
+docker build -t mc-panel-server:java11 -f Dockerfile.java11 .
+docker build -t mc-panel-server:java17 -f Dockerfile.java17 .
+docker build -t mc-panel-server:java25 -f Dockerfile.java25 .
 
 echo ""
 echo "=== Installation Complete ==="
