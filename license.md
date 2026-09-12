@@ -1,6 +1,6 @@
 EnderPanel License
 
-Version 1.0 — September 2026
+Version 1.0 — September 2026 Reupload of License that was removed in the June Commit.
 
 Copyright © 2026 EnderPanel Contributors
 All rights reserved.
