@@ -1,1 +1,2 @@
-For More Information view https://enderpanel.space
+EnderPanel is A OpenSource and Free Minecraft Panel 
+
