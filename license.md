@@ -88,6 +88,7 @@ Securing your server and environment.
 Reviewing changes before applying them.
 Ensuring that your use of the Software complies with applicable laws and regulations.
 Understanding the risks associated with administrative or automated actions performed through the Software.
+
 10. No Official Support or Endorsement
 
 Unless explicitly stated by the EnderPanel Contributors, forks, modified versions, third-party packages, integrations, hosting services, and other projects using EnderPanel are independent projects.
