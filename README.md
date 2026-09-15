@@ -1,5 +1,7 @@
 # EnderPanel
 
+# IMPORTANT RELEAES FOR ENDERPANEL ARE HERE THE RELEASES ON THIS PAGE ARE FOR THE APP: https://github.com/EnderPanel/Releases
+
 EnderPanel is a self-hosted, open-source control panel for running Minecraft servers with Docker. It provides server lifecycle controls, a web console, file and backup management, scheduled tasks, mod management, user accounts, two-factor authentication, and optional Playit networking.
 
 ## Requirements
