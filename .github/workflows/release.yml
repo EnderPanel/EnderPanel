@@ -72,5 +72,3 @@ jobs:
           files: |
             enderpanel-*.tar.gz
             enderpanel-*.tar.gz.sha256
-            enderpanel-latest.tar.gz
-            enderpanel-latest.tar.gz.sha256
