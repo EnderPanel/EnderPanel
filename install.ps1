@@ -1,8 +1,19 @@
 # EnderPanel Windows Installer
 # Run with: irm https://enderpanel.space/install.ps1 | iex
 
-Write-Host "=== EnderPanel Installer ===" -ForegroundColor Magenta
-Write-Host ""
+function Write-Step([string]$Message) {
+    Write-Host ""
+    Write-Host "==> $Message" -ForegroundColor Cyan
+}
+
+function Write-Success([string]$Message) {
+    Write-Host "[OK] $Message" -ForegroundColor Green
+}
+
+Write-Host "=====================================" -ForegroundColor Magenta
+Write-Host "       EnderPanel Installer          " -ForegroundColor Magenta
+Write-Host "              Windows                " -ForegroundColor Magenta
+Write-Host "=====================================" -ForegroundColor Magenta
 
 # Enable scripting if needed
 try { Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force } catch {}
@@ -109,29 +120,6 @@ function Install-DownloadedMsi {
     }
 }
 
-function Test-JavaInstall {
-    param(
-        [Parameter(Mandatory = $true)][int]$MajorVersion
-    )
-
-    $patterns = @(
-        (Join-Path $env:ProgramFiles "Eclipse Adoptium\jdk-$MajorVersion*"),
-        (Join-Path $env:ProgramFiles "AdoptOpenJDK\jdk-$MajorVersion*")
-    )
-
-    if ($MajorVersion -eq 8) {
-        $patterns += (Join-Path $env:ProgramFiles "Java\jdk1.8*")
-    }
-
-    foreach ($pattern in $patterns) {
-        if (Get-ChildItem -Path $pattern -Directory -ErrorAction SilentlyContinue | Select-Object -First 1) {
-            return $true
-        }
-    }
-
-    return $false
-}
-
 # Install Python
 Write-Host "Checking Python..." -ForegroundColor Cyan
 try { python --version *>$null } catch {
@@ -153,19 +141,7 @@ try { node --version *>$null } catch {
     Refresh-Path
 }
 
-# Install Java
-Write-Host "Checking Java installations..." -ForegroundColor Cyan
-foreach ($JavaVersion in 8, 17, 21, 25) {
-    if (-not (Test-JavaInstall -MajorVersion $JavaVersion)) {
-        Write-Host "Installing Java $JavaVersion..." -ForegroundColor Yellow
-        Install-DownloadedMsi `
-            -Url "https://api.adoptium.net/v3/installer/latest/$JavaVersion/ga/windows/x64/jdk/hotspot/normal/eclipse?project=jdk" `
-            -FileName "OpenJDK${JavaVersion}U-jdk_x64_windows_hotspot.msi"
-    } else {
-        Write-Host "Java $JavaVersion found." -ForegroundColor Green
-    }
-}
-Refresh-Path
+# Java is supplied by the version-specific Docker images built below.
 
 # Install Docker Desktop
 Write-Host "Checking Docker Desktop..." -ForegroundColor Cyan
@@ -224,9 +200,13 @@ if (Test-Path "$CurrentDir\backend\main.py" -and Test-Path "$CurrentDir\backend\
 Write-Host ""
 if ($LocalSource) {
     Write-Host "Local EnderPanel source detected. Installing from $LocalSource..." -ForegroundColor Cyan
+    $SourcePath = [System.IO.Path]::GetFullPath($LocalSource).TrimEnd('\')
+    $DestinationPath = [System.IO.Path]::GetFullPath($InstallDir).TrimEnd('\')
 
-    # Preserve existing data on upgrade
-    if (Test-Path $InstallDir) {
+    if ($SourcePath -eq $DestinationPath) {
+        Write-Success "Already running from the installation directory; updating in place."
+    } elseif (Test-Path $InstallDir) {
+        # Preserve existing data on upgrade
         Write-Host "Existing installation found. Upgrading..." -ForegroundColor Yellow
         if (Test-Path "$InstallDir\backend\enderpanel.db") {
             Copy-Item "$InstallDir\backend\enderpanel.db" "$LocalSource\backend\" -Force
@@ -238,10 +218,12 @@ if ($LocalSource) {
         if (Test-Path "$InstallDir\backend\data") { Copy-Item "$InstallDir\backend\data" "$LocalSource\backend\" -Recurse -Force }
 
         Remove-Item -Recurse -Force $InstallDir
+        New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+        Copy-Item "$LocalSource\*" $InstallDir -Recurse -Force
+    } else {
+        New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+        Copy-Item "$LocalSource\*" $InstallDir -Recurse -Force
     }
-
-    New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-    Copy-Item "$LocalSource\*" $InstallDir -Recurse -Force
 } else {
     Write-Host ""
     Write-Host "No local source found. Please run this installer from the EnderPanel source directory." -ForegroundColor Red
@@ -265,9 +247,9 @@ $NpmCmd = Resolve-CommandPath @("npm.cmd", "npm")
 if (-not $NpmCmd) {
     throw "npm was not found after installation."
 }
-& $NpmCmd install
+& $NpmCmd ci
 if ($LASTEXITCODE -ne 0) {
-    throw "npm install failed with exit code $LASTEXITCODE"
+    throw "npm ci failed with exit code $LASTEXITCODE"
 }
 
 # Build frontend
@@ -284,17 +266,25 @@ if (-not (Test-Path "$InstallDir\frontend\dist\index.html")) {
     throw "Frontend build did not create frontend\dist\index.html"
 }
 
-# Build Docker image
-Write-Host "Building Docker image..." -ForegroundColor Cyan
+# Build Docker images
+Write-Step "Building Java runtime images in Docker"
 Set-Location "$InstallDir\backend"
 $DockerCmd = Resolve-CommandPath @("docker.exe", "docker")
 if (-not $DockerCmd) {
     throw "docker command was not found before image build."
 }
-& $DockerCmd build -t mc-panel-server:latest .
-if ($LASTEXITCODE -ne 0) {
-    throw "docker build failed with exit code $LASTEXITCODE"
+foreach ($Image in @(
+    @{ Tag = "latest"; Dockerfile = "Dockerfile" },
+    @{ Tag = "java11"; Dockerfile = "Dockerfile.java11" },
+    @{ Tag = "java17"; Dockerfile = "Dockerfile.java17" },
+    @{ Tag = "java25"; Dockerfile = "Dockerfile.java25" }
+)) {
+    & $DockerCmd build -t "mc-panel-server:$($Image.Tag)" -f $Image.Dockerfile .
+    if ($LASTEXITCODE -ne 0) {
+        throw "Docker image mc-panel-server:$($Image.Tag) failed to build."
+    }
 }
+Write-Success "Java 11, 17, 21, and 25 runtime images are ready."
 
 Write-Host ""
 Write-Host "=== Installation Complete ===" -ForegroundColor Green

@@ -1,7 +1,16 @@
 #!/bin/bash
+set -euo pipefail
 
-echo "=== EnderPanel Installer (Linux) ==="
-echo ""
+BLUE='\033[1;34m'; GREEN='\033[1;32m'; YELLOW='\033[1;33m'; RED='\033[1;31m'; RESET='\033[0m'
+step() { printf "\n${BLUE}==>${RESET} %s\n" "$1"; }
+ok() { printf "${GREEN}[OK]${RESET} %s\n" "$1"; }
+warn() { printf "${YELLOW}[!]${RESET} %s\n" "$1"; }
+fail() { printf "${RED}[ERROR]${RESET} %s\n" "$1" >&2; exit 1; }
+
+printf "${BLUE}=====================================${RESET}\n"
+printf "${BLUE}       EnderPanel Installer          ${RESET}\n"
+printf "${BLUE}              Linux                  ${RESET}\n"
+printf "${BLUE}=====================================${RESET}\n"
 
 # Detect package manager
 if command -v apt &> /dev/null; then
@@ -13,8 +22,7 @@ elif command -v yum &> /dev/null; then
 elif command -v pacman &> /dev/null; then
     PKG="pacman"
 else
-    echo "Unsupported package manager. Install Python 3, Node.js, Java 8/17/21/25, and Docker manually."
-    exit 1
+    fail "Unsupported package manager. Install Python 3, Node.js 20, and Docker manually."
 fi
 
 echo "Detected package manager: $PKG"
@@ -67,63 +75,7 @@ else
     echo "Node.js found: $(node --version)"
 fi
 
-# Install Java
-echo ""
-echo "Checking Java..."
-if [ "$PKG" = "apt" ]; then
-    # Fix broken Adoptium/Temurin repo if present (uses distro codename, not 'stable')
-    if [ -f /etc/apt/sources.list.d/adoptium.list ] || grep -r "adoptium" /etc/apt/sources.list.d/ &>/dev/null; then
-        CODENAME=$(. /etc/os-release && echo "$VERSION_CODENAME")
-        if [ -n "$CODENAME" ]; then
-            sudo find /etc/apt/sources.list.d/ -name "*.list" -exec sudo sed -i "s|adoptium.net.*stable|adoptium.net/artifactory/deb ${CODENAME} main|g" {} \; 2>/dev/null || true
-        fi
-    fi
-    sudo apt-get update -o APT::Update::Error-Mode=ignore 2>/dev/null || sudo apt update || true
-    for ver in 8 17 21 25; do
-        if ! update-alternatives --list java 2>/dev/null | grep -q "java-${ver}"; then
-            echo "Installing Java ${ver}..."
-            sudo apt install -y openjdk-${ver}-jdk
-        else
-            echo "Java ${ver} found."
-        fi
-    done
-elif [ "$PKG" = "dnf" ]; then
-    for pair in "1.8:java-1.8.0-openjdk-devel" "17:java-17-openjdk-devel" "21:java-21-openjdk-devel" "25:java-latest-openjdk-devel"; do
-        ver="${pair%%:*}"; pkg="${pair##*:}"
-        key="jre_${ver/./_}"
-        if ! alternatives --list 2>/dev/null | grep -q "$key"; then
-            echo "Installing Java ${ver}..."
-            sudo dnf install -y $pkg
-        else
-            echo "Java ${ver} found."
-        fi
-    done
-elif [ "$PKG" = "yum" ]; then
-    for pair in "1.8:java-1.8.0-openjdk-devel" "17:java-17-openjdk-devel" "21:java-21-openjdk-devel" "25:java-latest-openjdk-devel"; do
-        ver="${pair%%:*}"; pkg="${pair##*:}"
-        if ! alternatives --list 2>/dev/null | grep -q "jre_${ver/./_}"; then
-            echo "Installing Java ${ver}..."
-            sudo yum install -y $pkg
-        else
-            echo "Java ${ver} found."
-        fi
-    done
-elif [ "$PKG" = "pacman" ]; then
-    for ver in 8 17 21; do
-        if ! pacman -Qs "jdk${ver}-openjdk" &> /dev/null; then
-            echo "Installing Java ${ver}..."
-            sudo pacman -S --noconfirm "jdk${ver}-openjdk"
-        else
-            echo "Java ${ver} found."
-        fi
-    done
-    if ! pacman -Qs "jre-openjdk" &> /dev/null; then
-        echo "Installing Java 25..."
-        sudo pacman -S --noconfirm jre-openjdk jdk-openjdk
-    else
-        echo "Latest OpenJDK found."
-    fi
-fi
+# Java is supplied by the version-specific Docker images built below.
 
 # Install Docker
 echo ""
@@ -188,13 +140,16 @@ INSTALL_DIR="$HOME/EnderPanel"
 if [ -n "$LOCAL_SOURCE" ]; then
     echo ""
     echo "Local EnderPanel source detected. Installing from $LOCAL_SOURCE..."
-    if [ -d "$INSTALL_DIR" ]; then
+    SOURCE_DIR="$(cd "$LOCAL_SOURCE" && pwd -P)"
+    if [ "$SOURCE_DIR" = "$INSTALL_DIR" ]; then
+        ok "Already running from the installation directory; updating in place."
+    elif [ -d "$INSTALL_DIR" ]; then
         echo "Existing installation found. Upgrading..."
-        sudo cp -r "$LOCAL_SOURCE/." "$INSTALL_DIR/" 2>/dev/null || cp -r "$LOCAL_SOURCE/." "$INSTALL_DIR/" 2>/dev/null || true
+        sudo cp -r "$SOURCE_DIR/." "$INSTALL_DIR/" 2>/dev/null || cp -r "$SOURCE_DIR/." "$INSTALL_DIR/"
         mkdir -p "$INSTALL_DIR/backend/servers" "$INSTALL_DIR/backend/avatars" 2>/dev/null || true
     else
         mkdir -p "$INSTALL_DIR"
-        cp -a "$LOCAL_SOURCE/." "$INSTALL_DIR/"
+        cp -a "$SOURCE_DIR/." "$INSTALL_DIR/"
     fi
 else
     echo ""
@@ -217,25 +172,30 @@ sudo python3 -m pip install --break-system-packages -r requirements.txt
 echo ""
 echo "Installing frontend dependencies..."
 cd "$INSTALL_DIR/frontend"
-npm install --include=dev
+npm ci
 
 # Build frontend
 echo ""
 echo "Building frontend..."
 npm run build
 
-# Build Docker image
-echo ""
-echo "Building Docker image..."
+# Build Docker images
+step "Building Java runtime images in Docker"
+cd "$INSTALL_DIR/backend"
 
 # Try to build as user first
 if docker info &> /dev/null; then
-    echo "Docker accessible as user, building..."
-    docker build -t mc-panel-server:latest .
+    DOCKER_RUN=(docker)
 else
-    echo "Docker not accessible as user. Attempting to activate docker group..."
-    sg docker -c "docker build -t mc-panel-server:latest ."
+    warn "Docker needs elevated access; using sudo."
+    DOCKER_RUN=(sudo docker)
 fi
+
+"${DOCKER_RUN[@]}" build -t mc-panel-server:latest .
+"${DOCKER_RUN[@]}" build -t mc-panel-server:java11 -f Dockerfile.java11 .
+"${DOCKER_RUN[@]}" build -t mc-panel-server:java17 -f Dockerfile.java17 .
+"${DOCKER_RUN[@]}" build -t mc-panel-server:java25 -f Dockerfile.java25 .
+ok "Java 11, 17, 21, and 25 runtime images are ready."
 
 echo ""
 echo "=== Installation Complete ==="

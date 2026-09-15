@@ -13,6 +13,29 @@ Java does not need to be installed on the host. EnderPanel builds Java 11, 17, 2
 
 The supplied installers can install or guide you through these prerequisites, but review scripts before running them with administrator privileges.
 
+## Installers
+
+Run the installer from the cloned EnderPanel source directory:
+
+- Windows: [`install.ps1`](install.ps1)
+- Linux: [`install-linux.sh`](install-linux.sh)
+- macOS: [`install-macos.sh`](install-macos.sh)
+
+Each installer prepares the backend and frontend and builds all supported Java runtime images inside Docker. Packaged installers are also available from the [EnderPanel Releases repository](https://github.com/EnderPanel/Releases).
+
+```powershell
+# Windows (run PowerShell as Administrator)
+.\install.ps1
+```
+
+```bash
+# Linux
+chmod +x install-linux.sh && ./install-linux.sh
+
+# macOS
+chmod +x install-macos.sh && ./install-macos.sh
+```
+
 ## Development setup
 
 ```text

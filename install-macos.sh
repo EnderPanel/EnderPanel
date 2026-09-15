@@ -1,7 +1,15 @@
 #!/bin/bash
+set -euo pipefail
 
-echo "=== EnderPanel Installer (macOS) ==="
-echo ""
+BLUE='\033[1;34m'; GREEN='\033[1;32m'; YELLOW='\033[1;33m'; RED='\033[1;31m'; RESET='\033[0m'
+step() { printf "\n${BLUE}==>${RESET} %s\n" "$1"; }
+ok() { printf "${GREEN}[OK]${RESET} %s\n" "$1"; }
+fail() { printf "${RED}[ERROR]${RESET} %s\n" "$1" >&2; exit 1; }
+
+printf "${BLUE}=====================================${RESET}\n"
+printf "${BLUE}       EnderPanel Installer          ${RESET}\n"
+printf "${BLUE}              macOS                  ${RESET}\n"
+printf "${BLUE}=====================================${RESET}\n"
 
 # Check Homebrew
 if ! command -v brew &> /dev/null; then
@@ -34,32 +42,7 @@ else
     echo "Node.js found: $(node --version)"
 fi
 
-# Install Java
-echo "Checking Java installations..."
-if ! /usr/libexec/java_home -v 1.8 &> /dev/null; then
-    echo "Installing Java 8..."
-    brew install --cask temurin@8
-else
-    echo "Java 8 found."
-fi
-if ! /usr/libexec/java_home -v 17 &> /dev/null; then
-    echo "Installing Java 17..."
-    brew install --cask temurin@17
-else
-    echo "Java 17 found."
-fi
-if ! /usr/libexec/java_home -v 21 &> /dev/null; then
-    echo "Installing Java 21..."
-    brew install --cask temurin@21
-else
-    echo "Java 21 found."
-fi
-if ! /usr/libexec/java_home -v 25 &> /dev/null; then
-    echo "Installing Java 25..."
-    brew install --cask temurin
-else
-    echo "Java 25 found."
-fi
+# Java is supplied by the version-specific Docker images built below.
 
 # Install Docker
 if ! command -v docker &> /dev/null; then
@@ -127,14 +110,17 @@ INSTALL_DIR="$HOME/EnderPanel"
 if [ -n "$LOCAL_SOURCE" ]; then
     echo ""
     echo "Local EnderPanel source detected. Installing from $LOCAL_SOURCE..."
+    SOURCE_DIR="$(cd "$LOCAL_SOURCE" && pwd -P)"
     # Preserve existing data on upgrade
-    if [ -d "$INSTALL_DIR" ]; then
+    if [ "$SOURCE_DIR" = "$INSTALL_DIR" ]; then
+        ok "Already running from the installation directory; updating in place."
+    elif [ -d "$INSTALL_DIR" ]; then
         echo "Existing installation found. Upgrading..."
-        cp -r "$LOCAL_SOURCE/." "$INSTALL_DIR/" 2>/dev/null || true
+        cp -r "$SOURCE_DIR/." "$INSTALL_DIR/"
         mkdir -p "$INSTALL_DIR/backend/servers" "$INSTALL_DIR/backend/avatars" 2>/dev/null || true
     else
         mkdir -p "$INSTALL_DIR"
-        cp -a "$LOCAL_SOURCE/." "$INSTALL_DIR/"
+        cp -a "$SOURCE_DIR/." "$INSTALL_DIR/"
     fi
 else
     echo ""
@@ -155,7 +141,7 @@ sudo python3 -m pip install --break-system-packages -r requirements.txt
 echo ""
 echo "Installing frontend dependencies..."
 cd "$INSTALL_DIR/frontend"
-npm install
+npm ci
 
 echo ""
 echo "Building frontend..."
@@ -168,6 +154,7 @@ docker build -t mc-panel-server:latest .
 docker build -t mc-panel-server:java11 -f Dockerfile.java11 .
 docker build -t mc-panel-server:java17 -f Dockerfile.java17 .
 docker build -t mc-panel-server:java25 -f Dockerfile.java25 .
+ok "Java 11, 17, 21, and 25 runtime images are ready."
 
 echo ""
 echo "=== Installation Complete ==="
