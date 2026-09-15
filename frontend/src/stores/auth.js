@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import axios from 'axios'
 
 axios.defaults.withCredentials = true
+localStorage.removeItem('token')
 
 let initPromise = null
 
@@ -44,7 +45,6 @@ export const useAuthStore = defineStore('auth', {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       })
       this.user = res.data.user
-      localStorage.setItem('token', res.data.access_token || '')
       localStorage.setItem('user', JSON.stringify(this.user))
       const themeStore = useThemeStore()
       themeStore.applyUserPreferences(this.user)
@@ -60,7 +60,6 @@ export const useAuthStore = defineStore('auth', {
       const { useThemeStore } = await import('./theme')
       const res = await axios.post('/api/auth/register', { username, email, password })
       this.user = res.data.user
-      localStorage.setItem('token', res.data.access_token || '')
       localStorage.setItem('user', JSON.stringify(this.user))
       const themeStore = useThemeStore()
       themeStore.applyUserPreferences(this.user)
@@ -73,7 +72,6 @@ export const useAuthStore = defineStore('auth', {
     },
     clearSession() {
       this.user = null
-      localStorage.removeItem('token')
       localStorage.removeItem('user')
       this.initialized = true
     },
@@ -90,10 +88,6 @@ export const useAuthStore = defineStore('auth', {
         try {
           const { useThemeStore } = await import('./theme')
           const res = await axios.get('/api/auth/me')
-          const sessionToken = res.headers?.['x-enderpanel-token']
-          if (sessionToken) {
-            localStorage.setItem('token', sessionToken)
-          }
           this.user = res.data
           localStorage.setItem('user', JSON.stringify(this.user))
           const themeStore = useThemeStore()
@@ -107,7 +101,6 @@ export const useAuthStore = defineStore('auth', {
           return this.user
         } catch {
           this.user = null
-          localStorage.removeItem('token')
           localStorage.removeItem('user')
           return null
         } finally {

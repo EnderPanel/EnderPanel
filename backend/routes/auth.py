@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Form, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 import pyotp
 import qrcode
@@ -18,6 +18,7 @@ from utils.security import (
     hash_password,
     is_legacy_password_hash,
     set_auth_cookie,
+    set_csrf_cookie,
     verify_password,
 )
 
@@ -25,9 +26,17 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 limiter = Limiter(key_func=get_remote_address)
 
 class UserCreate(BaseModel):
-    username: str
-    email: str
-    password: str
+    username: str = Field(min_length=3, max_length=50, pattern=r"^[A-Za-z0-9_.-]+$")
+    email: str = Field(min_length=3, max_length=100)
+    password: str = Field(min_length=10, max_length=256)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value.count("@") != 1 or value.startswith("@") or value.endswith("@"):
+            raise ValueError("Invalid email address")
+        return value
 
 def user_to_dict(user: User) -> dict:
     theme = user.theme or "dark"
@@ -67,7 +76,7 @@ def register(request: Request, user: UserCreate, response: Response, db: Session
 
     token = create_access_token({"sub": db_user.username})
     set_auth_cookie(response, token)
-    return {"access_token": token, "token_type": "bearer", "user": user_to_dict(db_user)}
+    return {"user": user_to_dict(db_user)}
 
 @router.post("/login")
 @limiter.limit("10/minute")
@@ -96,7 +105,7 @@ def login(
 
     token = create_access_token({"sub": user.username})
     set_auth_cookie(response, token)
-    return {"access_token": token, "token_type": "bearer", "user": user_to_dict(user)}
+    return {"user": user_to_dict(user)}
 
 
 @router.post("/logout")
@@ -151,9 +160,9 @@ def disable_2fa(data: Disable2FA, db: Session = Depends(get_db), current_user: U
     return {"success": True}
 
 @router.get("/me")
-def get_me(response: Response, current_user: User = Depends(get_current_user)):
-    token = create_access_token({"sub": current_user.username})
-    response.headers["X-EnderPanel-Token"] = token
+def get_me(request: Request, response: Response, current_user: User = Depends(get_current_user)):
+    if not request.cookies.get("csrf_token"):
+        set_csrf_cookie(response)
     return user_to_dict(current_user)
 
 

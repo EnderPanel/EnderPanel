@@ -25,7 +25,7 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: frontend
-        run: npm install
+        run: npm ci
 
       - name: Build frontend
         working-directory: frontend
@@ -59,6 +59,8 @@ jobs:
           find "$STAGE_DIR" -name '*.pyc' -delete
           tar -czf "enderpanel-${VERSION}.tar.gz" -C "$STAGE_ROOT" CoreFIles
           cp "enderpanel-${VERSION}.tar.gz" enderpanel-latest.tar.gz
+          sha256sum "enderpanel-${VERSION}.tar.gz" > "enderpanel-${VERSION}.tar.gz.sha256"
+          sha256sum enderpanel-latest.tar.gz > enderpanel-latest.tar.gz.sha256
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
@@ -69,4 +71,6 @@ jobs:
           overwrite_files: true
           files: |
             enderpanel-*.tar.gz
+            enderpanel-*.tar.gz.sha256
             enderpanel-latest.tar.gz
+            enderpanel-latest.tar.gz.sha256

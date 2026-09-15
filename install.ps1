@@ -72,6 +72,10 @@ function Install-DownloadedExe {
     $DownloadPath = Join-Path $env:TEMP $FileName
     Invoke-WebRequest -Uri $Url -OutFile $DownloadPath
     try {
+        $Signature = Get-AuthenticodeSignature -LiteralPath $DownloadPath
+        if ($Signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+            throw "Downloaded installer has no valid Authenticode signature: $FileName"
+        }
         $Process = Start-Process -FilePath $DownloadPath -ArgumentList $Arguments -Wait -PassThru
         if ($Process.ExitCode -ne 0) {
             throw "Installer exited with code $($Process.ExitCode)"
@@ -91,6 +95,10 @@ function Install-DownloadedMsi {
     $DownloadPath = Join-Path $env:TEMP $FileName
     Invoke-WebRequest -Uri $Url -OutFile $DownloadPath
     try {
+        $Signature = Get-AuthenticodeSignature -LiteralPath $DownloadPath
+        if ($Signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+            throw "Downloaded installer has no valid Authenticode signature: $FileName"
+        }
         $Arguments = @("/i", "`"$DownloadPath`"", "/qn", "/norestart") + $ExtraArguments
         $Process = Start-Process -FilePath "msiexec.exe" -ArgumentList $Arguments -Wait -PassThru
         if ($Process.ExitCode -ne 0) {

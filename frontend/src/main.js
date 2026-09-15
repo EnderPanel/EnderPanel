@@ -7,12 +7,19 @@ import './style.css'
 
 axios.defaults.withCredentials = true
 
+function readCookie(name) {
+  const prefix = `${encodeURIComponent(name)}=`
+  const match = document.cookie.split('; ').find(value => value.startsWith(prefix))
+  return match ? decodeURIComponent(match.slice(prefix.length)) : null
+}
+
 axios.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
   const requestUrl = String(config.url || '')
-  if (token && requestUrl.startsWith('/api') && !config.headers?.Authorization) {
+  const method = String(config.method || 'get').toLowerCase()
+  if (requestUrl.startsWith('/api') && !['get', 'head', 'options'].includes(method)) {
+    const csrfToken = readCookie('csrf_token')
     config.headers = config.headers || {}
-    config.headers.Authorization = `Bearer ${token}`
+    if (csrfToken) config.headers['X-CSRF-Token'] = csrfToken
   }
   return config
 })

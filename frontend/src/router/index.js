@@ -1,14 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import Login from '../views/Login.vue'
-import Register from '../views/Register.vue'
-import Welcome from '../views/Welcome.vue'
-import Dashboard from '../views/Dashboard.vue'
-import ServerView from '../views/ServerView.vue'
-import Users from '../views/Users.vue'
-import Admin from '../views/Admin.vue'
-import Themes from '../views/Themes.vue'
-import GDriveCallback from '../views/GDriveCallback.vue'
 import { useAuthStore } from '../stores/auth'
+
+const Login = () => import('../views/Login.vue')
+const Register = () => import('../views/Register.vue')
+const Welcome = () => import('../views/Welcome.vue')
+const Dashboard = () => import('../views/Dashboard.vue')
+const ServerView = () => import('../views/ServerView.vue')
+const Users = () => import('../views/Users.vue')
+const Admin = () => import('../views/Admin.vue')
+const Themes = () => import('../views/Themes.vue')
 
 const routes = [
   { path: '/', redirect: '/login' },
@@ -20,7 +20,6 @@ const routes = [
   { path: '/server/:id', component: ServerView, meta: { requiresAuth: true } },
   { path: '/users', component: Users, meta: { requiresAuth: true, requiresAdmin: true } },
   { path: '/admin', component: Admin, meta: { requiresAuth: true, requiresAdmin: true } },
-  { path: '/admin/gdrive-callback', component: GDriveCallback, meta: { requiresAuth: true, requiresAdmin: true } },
 ]
 
 const router = createRouter({

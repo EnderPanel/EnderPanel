@@ -8,6 +8,7 @@ import signal
 import time
 import textwrap
 import asyncio
+import hmac
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,8 +19,9 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from database import engine, Base, SessionLocal
 from models import PanelSetting
-from routes import auth_router, servers_router, console_router, files_router, players_router, plugins_router, settings_router, users_router, avatars_router, admin_router, update_router, domain_runtime_router, playit_runtime_router, server_network_router, sftp_router, tasks_router, google_drive_router
+from routes import auth_router, servers_router, console_router, files_router, players_router, plugins_router, settings_router, users_router, avatars_router, admin_router, update_router, domain_runtime_router, playit_runtime_router, server_network_router, sftp_router, tasks_router
 from config import SERVERS_DIR, BASE_DIR
+from utils.security import AUTH_COOKIE_NAME, CSRF_COOKIE_NAME
 from utils.docker_client import close_docker_client, get_docker_client
 from utils.docker_cleanup import remove_container_if_exists
 from utils.http_compat import patch_http_response_close
@@ -316,6 +318,17 @@ INJECTION_PATTERNS = [
 async def security_middleware(request: Request, call_next):
     path = request.url.path
 
+    if (
+        path.startswith("/api/")
+        and request.method.upper() not in {"GET", "HEAD", "OPTIONS"}
+        and request.cookies.get(AUTH_COOKIE_NAME)
+        and not request.headers.get("authorization")
+    ):
+        csrf_cookie = request.cookies.get(CSRF_COOKIE_NAME, "")
+        csrf_header = request.headers.get("x-csrf-token", "")
+        if not csrf_cookie or not csrf_header or not hmac.compare_digest(csrf_cookie, csrf_header):
+            return JSONResponse(status_code=403, content={"detail": "CSRF validation failed"})
+
     # Block sensitive files
     blocked_extensions = (".env", ".git", ".gitignore", ".py", ".pyc", ".db", ".sqlite", ".log", ".sh", ".ps1", ".json")
     blocked_dirs = ("__pycache__", "node_modules", "backend/", "servers/", ".git/")
@@ -343,7 +356,6 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-EnderPanel-Token"],
 )
 
 app.include_router(auth_router)
@@ -362,7 +374,6 @@ app.include_router(playit_runtime_router)
 app.include_router(server_network_router)
 app.include_router(sftp_router)
 app.include_router(tasks_router)
-app.include_router(google_drive_router)
 
 os.makedirs(SERVERS_DIR, exist_ok=True)
 os.makedirs(BRANDING_DIR, exist_ok=True)

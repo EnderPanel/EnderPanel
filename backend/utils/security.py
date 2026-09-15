@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import os
+import secrets
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from datetime import datetime, timedelta
 
@@ -17,6 +18,7 @@ from config import ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM, DATA_ENCRYPTION_KEY, 
 PASSWORD_SCHEME = "pbkdf2_sha256"
 PASSWORD_ITERATIONS = 600_000
 AUTH_COOKIE_NAME = "access_token"
+CSRF_COOKIE_NAME = "csrf_token"
 fernet = Fernet(DATA_ENCRYPTION_KEY.encode("utf-8"))
 
 def hash_password(password: str) -> str:
@@ -69,10 +71,26 @@ def set_auth_cookie(response: Response, token: str) -> None:
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/",
     )
+    set_csrf_cookie(response, secure=secure)
+
+
+def set_csrf_cookie(response: Response, *, secure: bool | None = None) -> None:
+    if secure is None:
+        secure = os.getenv("SESSION_COOKIE_SECURE", "false").lower() in ("true", "1", "yes")
+    response.set_cookie(
+        key=CSRF_COOKIE_NAME,
+        value=secrets.token_urlsafe(32),
+        httponly=False,
+        samesite="strict",
+        secure=secure,
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/",
+    )
 
 
 def clear_auth_cookie(response: Response) -> None:
     response.delete_cookie(key=AUTH_COOKIE_NAME, path="/")
+    response.delete_cookie(key=CSRF_COOKIE_NAME, path="/")
 
 
 def encrypt_secret(value: str | None) -> str | None:

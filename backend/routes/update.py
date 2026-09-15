@@ -5,6 +5,7 @@ import tempfile
 import re
 import httpx
 import tarfile
+import hashlib
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from models.user import User
@@ -131,6 +132,16 @@ async def install_update(current_user: User = Depends(get_current_user)):
             r = await c.get(download_url)
             if r.status_code != 200:
                 raise HTTPException(500, "Failed to download update")
+
+            checksum_response = await c.get(f"{download_url}.sha256")
+            if checksum_response.status_code != 200:
+                raise HTTPException(502, "Update checksum is unavailable; refusing an unverified update")
+            expected_checksum = checksum_response.text.strip().split()[0].lower()
+            if not re.fullmatch(r"[0-9a-f]{64}", expected_checksum):
+                raise HTTPException(502, "Update checksum is invalid")
+            actual_checksum = hashlib.sha256(r.content).hexdigest()
+            if not __import__("hmac").compare_digest(actual_checksum, expected_checksum):
+                raise HTTPException(502, "Update checksum verification failed")
 
             with tempfile.TemporaryDirectory() as tmpdir:
                 tmp_tar = os.path.join(tmpdir, "update.tar.gz")
