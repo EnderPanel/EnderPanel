@@ -183,27 +183,36 @@ def ensure_upload_size(content: bytes, limit_bytes: int) -> None:
         )
 
 def _local_fix_permissions(path: str) -> bool:
+    def make_owner_writable(target: str, *, directory: bool = False) -> None:
+        current = stat.S_IMODE(os.stat(target, follow_symlinks=False).st_mode)
+        owner_bits = stat.S_IRUSR | stat.S_IWUSR
+        if directory:
+            owner_bits |= stat.S_IXUSR
+        safe_mode = (current | owner_bits) & ~(stat.S_IWGRP | stat.S_IWOTH)
+        if os.chmod in os.supports_follow_symlinks:
+            os.chmod(target, safe_mode, follow_symlinks=False)
+        else:
+            os.chmod(target, safe_mode)
+
     success = True
     try:
         if os.path.isdir(path):
-            os.chmod(path, 0o777)
+            make_owner_writable(path, directory=True)
             for root, dirs, files in os.walk(path):
                 for name in dirs:
                     try:
-                        os.chmod(os.path.join(root, name), 0o777)
-                    except PermissionError:
+                        make_owner_writable(os.path.join(root, name), directory=True)
+                    except (OSError, NotImplementedError):
                         success = False
                 for name in files:
                     try:
-                        os.chmod(os.path.join(root, name), 0o666)
-                    except PermissionError:
+                        make_owner_writable(os.path.join(root, name))
+                    except (OSError, NotImplementedError):
                         success = False
         else:
-            os.chmod(path, 0o666)
-    except PermissionError:
+            make_owner_writable(path)
+    except (OSError, NotImplementedError):
         success = False
-    except FileNotFoundError:
-        return True
     return success
 
 def _docker_fix_permissions(path: str) -> bool:
@@ -211,10 +220,16 @@ def _docker_fix_permissions(path: str) -> bool:
         return False
 
     try:
+        uid = os.getuid()
+        gid = os.getgid()
         get_docker_client().containers.run(
             FILE_HELPER_IMAGE,
             name=_helper_container_name("chmod"),
-            command=["sh", "-lc", "chmod -R a+rwX /target || true"],
+            command=[
+                "sh", "-lc",
+                'chown -R "$TARGET_UID:$TARGET_GID" /target && chmod -R u+rwX,go-w /target',
+            ],
+            environment={"TARGET_UID": str(uid), "TARGET_GID": str(gid)},
             remove=True,
             labels={"enderpanel.helper": "true", "enderpanel.purpose": "chmod"},
             volumes={os.path.abspath(path): {"bind": "/target", "mode": "rw"}},

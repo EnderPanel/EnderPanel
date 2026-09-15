@@ -26,6 +26,17 @@ class UpdateTests(unittest.TestCase):
                 with self.assertRaises(HTTPException):
                     safe_extract_tar(archive, os.path.join(directory, "extract"))
 
+    def test_tar_special_files_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive_path = os.path.join(directory, "update.tar.gz")
+            with tarfile.open(archive_path, "w:gz") as archive:
+                info = tarfile.TarInfo("unsafe-fifo")
+                info.type = tarfile.FIFOTYPE
+                archive.addfile(info)
+            with tarfile.open(archive_path, "r:gz") as archive:
+                with self.assertRaises(HTTPException):
+                    safe_extract_tar(archive, os.path.join(directory, "extract"))
+
 
 if __name__ == "__main__":
     unittest.main()

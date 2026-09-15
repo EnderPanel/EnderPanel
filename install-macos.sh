@@ -151,10 +151,11 @@ echo ""
 echo "Building Docker images..."
 cd "$INSTALL_DIR/backend"
 docker build -t mc-panel-server:latest .
+docker build -t mc-panel-server:java8 -f Dockerfile.java8 .
 docker build -t mc-panel-server:java11 -f Dockerfile.java11 .
 docker build -t mc-panel-server:java17 -f Dockerfile.java17 .
 docker build -t mc-panel-server:java25 -f Dockerfile.java25 .
-ok "Java 11, 17, 21, and 25 runtime images are ready."
+ok "Java 8, 11, 17, 21, and 25 runtime images are ready."
 
 echo ""
 echo "=== Installation Complete ==="

@@ -85,9 +85,24 @@ if ! command -v docker &> /dev/null; then
     if [ "$PKG" = "apt" ]; then
         sudo apt install -y ca-certificates curl gnupg
         sudo install -m 0755 -d /etc/apt/keyrings
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        # Docker publishes separate repositories for Debian and Ubuntu.
+        . /etc/os-release
+        if [ "${ID:-}" = "debian" ]; then
+            DOCKER_DIST="debian"
+            DOCKER_CODENAME="${VERSION_CODENAME:-}"
+        elif [ "${ID:-}" = "ubuntu" ]; then
+            DOCKER_DIST="ubuntu"
+            DOCKER_CODENAME="${VERSION_CODENAME:-}"
+        elif [ -n "${UBUNTU_CODENAME:-}" ]; then
+            DOCKER_DIST="ubuntu"
+            DOCKER_CODENAME="$UBUNTU_CODENAME"
+        else
+            fail "Could not determine the Debian or Ubuntu release for Docker's repository."
+        fi
+        [ -n "$DOCKER_CODENAME" ] || fail "Linux release codename is missing."
+        curl -fsSL "https://download.docker.com/linux/${DOCKER_DIST}/gpg" | sudo gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg
         sudo chmod a+r /etc/apt/keyrings/docker.gpg
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/${DOCKER_DIST} ${DOCKER_CODENAME} stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
         sudo apt update
         sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     elif [ "$PKG" = "dnf" ]; then
@@ -192,10 +207,11 @@ else
 fi
 
 "${DOCKER_RUN[@]}" build -t mc-panel-server:latest .
+"${DOCKER_RUN[@]}" build -t mc-panel-server:java8 -f Dockerfile.java8 .
 "${DOCKER_RUN[@]}" build -t mc-panel-server:java11 -f Dockerfile.java11 .
 "${DOCKER_RUN[@]}" build -t mc-panel-server:java17 -f Dockerfile.java17 .
 "${DOCKER_RUN[@]}" build -t mc-panel-server:java25 -f Dockerfile.java25 .
-ok "Java 11, 17, 21, and 25 runtime images are ready."
+ok "Java 8, 11, 17, 21, and 25 runtime images are ready."
 
 echo ""
 echo "=== Installation Complete ==="

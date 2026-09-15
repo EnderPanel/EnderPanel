@@ -142,7 +142,7 @@ def has_accepted_eula(sid: int, name: str) -> bool:
         logger.warning("Could not read EULA file %s: %s", path, exc)
         return False
 
-def java_version_for_mc(mc_version: str) -> int:
+def java_version_for_mc(mc_version: str, server_type: str | None = None) -> int:
     try:
         parts = mc_version.split(".")
         major = int(parts[0]) if parts else 0
@@ -158,13 +158,23 @@ def java_version_for_mc(mc_version: str) -> int:
         return 25
     if minor > 20 or (minor == 20 and patch >= 5):
         return 21
+    normalized_type = (server_type or "").lower()
+    if normalized_type == "paper" and minor == 20:
+        return 21
     if minor >= 17:
         return 17
-    return 11
+    if normalized_type == "paper":
+        if minor == 16 and patch >= 5:
+            return 17
+        if minor >= 12:
+            return 11
+    return 8
 
 
-def image_for_mc(mc_version: str) -> str:
-    v = java_version_for_mc(mc_version)
+def image_for_mc(mc_version: str, server_type: str | None = None) -> str:
+    v = java_version_for_mc(mc_version, server_type)
+    if v == 8:
+        return f"{IMAGE}:java8"
     if v == 11:
         return f"{IMAGE}:java11"
     if v == 17:
@@ -194,6 +204,7 @@ def ensure_runtime_images(client) -> None:
         ("java25", "Dockerfile.java25"),
         ("java17", "Dockerfile.java17"),
         ("java11", "Dockerfile.java11"),
+        ("java8", "Dockerfile.java8"),
     ]:
         image_name = f"{IMAGE}:{tag}"
         try:
@@ -996,7 +1007,7 @@ async def ensure_modded_server_layout(server: Server, path: str) -> tuple[bool, 
             "--user", runtime_user,
             "-v", f"{path}:/server",
             "-w", "/server",
-            image_for_mc(server.version),
+            image_for_mc(server.version, server.server_type),
             "/opt/java/openjdk/bin/java",
             "-jar", installer_name,
             "--installServer",
@@ -1236,7 +1247,7 @@ async def create_server_from_pearl(
         handle.write("eula=false\n")
     ensure_server_properties(server.id, server.name, port, effective_data.max_players, effective_data.motd)
 
-    runtime_image = effective_data.runtime_image or image_for_mc(effective_data.version)
+    runtime_image = effective_data.runtime_image or image_for_mc(effective_data.version, effective_data.server_type)
     manifest = {
         "name": effective_data.pearl_name,
         "description": source_description,
@@ -1442,7 +1453,7 @@ async def start_server(
             raise HTTPException(400, "EULA acceptance required")
 
     java = java_cmd(s.version)
-    runtime_image = image_for_mc(s.version)
+    runtime_image = image_for_mc(s.version, s.server_type)
     startup_command_text: str | None = None
     if pearl_manifest and pearl_manifest.get("runtime_image") and (pearl_manifest.get("startup") or s.custom_launch_command):
         cmd_string = normalize_pearl_text(pearl_manifest.get("startup") or s.custom_launch_command)

@@ -2,6 +2,7 @@ from datetime import datetime, time as datetime_time, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator, model_validator
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from database import SessionLocal, get_db
@@ -21,10 +22,11 @@ SCHEDULE_MODES = {"interval", "specific_time"}
 MIN_TASK_INTERVAL_MINUTES = 5
 MAX_TASK_INTERVAL_MINUTES = 10080
 DEFAULT_RUN_DAYS = [0, 1, 2, 3, 4, 5, 6]
+RUNNING_TASK_STALE_AFTER = timedelta(hours=24)
 
 
 def utcnow() -> datetime:
-    return datetime.utcnow()
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def local_timezone():
@@ -249,9 +251,34 @@ class ServerTaskPayload(BaseModel):
 async def execute_server_task(task_id: int, *, manual: bool = False) -> tuple[bool, str | None]:
     db = SessionLocal()
     try:
-        task = db.query(ServerTask).filter(ServerTask.id == task_id).first()
+        now = utcnow()
+        task_query = db.query(ServerTask).filter(ServerTask.id == task_id)
+        if db.bind is not None and db.bind.dialect.name == "sqlite":
+            # SQLite has no row-level SELECT FOR UPDATE. BEGIN IMMEDIATE makes
+            # selecting and advancing the schedule one atomic claim.
+            db.execute(text("BEGIN IMMEDIATE"))
+        else:
+            task_query = task_query.with_for_update()
+
+        task = task_query.first()
         if not task:
             return False, "Task not found"
+
+        if (
+            task.last_status == "running"
+            and task.last_run_at is not None
+            and task.last_run_at > now - RUNNING_TASK_STALE_AFTER
+        ):
+            db.rollback()
+            return False, "Task is already running"
+
+        if not manual and (
+            not task.enabled
+            or task.next_run_at is None
+            or task.next_run_at > now
+        ):
+            db.rollback()
+            return False, "Task is no longer due"
 
         server = db.query(Server).filter(Server.id == task.server_id).first()
         if not server:
@@ -267,7 +294,6 @@ async def execute_server_task(task_id: int, *, manual: bool = False) -> tuple[bo
             db.commit()
             return False, task.last_error
 
-        now = utcnow()
         task.last_status = "running"
         task.last_error = None
         task.last_run_at = now

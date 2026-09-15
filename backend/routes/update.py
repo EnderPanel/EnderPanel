@@ -1,12 +1,15 @@
 import os
+import asyncio
 import json
 import shutil
+import subprocess
+import sys
 import tempfile
 import re
 import httpx
 import tarfile
 import hashlib
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from models.user import User
 from utils.security import get_current_user
@@ -26,6 +29,13 @@ LEGACY_UPDATE_BASES = {
     "https://enderpanel.space",
     "http://enderpanel.space",
 }
+RUNTIME_IMAGES = (
+    ("latest", "Dockerfile"),
+    ("java8", "Dockerfile.java8"),
+    ("java11", "Dockerfile.java11"),
+    ("java17", "Dockerfile.java17"),
+    ("java25", "Dockerfile.java25"),
+)
 
 def load_config():
     try:
@@ -90,7 +100,66 @@ def safe_extract_tar(tar: tarfile.TarFile, destination: str) -> None:
             raise HTTPException(status_code=400, detail="Update archive contains unsafe paths")
         if member.issym() or member.islnk():
             raise HTTPException(status_code=400, detail="Update archive contains unsupported links")
-    tar.extractall(destination)
+        if not member.isdir() and not member.isfile():
+            raise HTTPException(status_code=400, detail="Update archive contains unsupported special files")
+    tar.extractall(destination, filter="data")
+
+
+def _file_changed(source: str, destination: str) -> bool:
+    if not os.path.isfile(source) or not os.path.isfile(destination):
+        return os.path.isfile(source) != os.path.isfile(destination)
+    with open(source, "rb") as source_file, open(destination, "rb") as destination_file:
+        return hashlib.sha256(source_file.read()).digest() != hashlib.sha256(destination_file.read()).digest()
+
+
+def _run_update_command(command: list[str], *, cwd: str, description: str) -> None:
+    try:
+        result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=False)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"{description} could not start: {exc}") from exc
+    if result.returncode != 0:
+        output = (result.stderr or result.stdout or "unknown error").strip()[-2000:]
+        raise HTTPException(status_code=500, detail=f"{description} failed: {output}")
+
+
+def prepare_update_runtime(payload_dir: str) -> None:
+    payload_backend = os.path.join(payload_dir, "backend")
+    installed_backend = os.path.join(BASE_DIR, "backend")
+    new_requirements = os.path.join(payload_backend, "requirements.txt")
+    installed_requirements = os.path.join(installed_backend, "requirements.txt")
+    if _file_changed(new_requirements, installed_requirements):
+        _run_update_command(
+            [sys.executable, "-m", "pip", "install", "-r", new_requirements],
+            cwd=payload_backend,
+            description="Installing backend dependencies",
+        )
+
+    changed_images = [
+        (tag, dockerfile)
+        for tag, dockerfile in RUNTIME_IMAGES
+        if _file_changed(
+            os.path.join(payload_backend, dockerfile),
+            os.path.join(installed_backend, dockerfile),
+        )
+    ]
+    if changed_images:
+        docker = shutil.which("docker")
+        if not docker:
+            raise HTTPException(status_code=500, detail="Docker is required to rebuild updated Java images")
+        for tag, dockerfile in changed_images:
+            _run_update_command(
+                [docker, "build", "-t", f"mc-panel-server:{tag}", "-f", dockerfile, "."],
+                cwd=payload_backend,
+                description=f"Building Java image {tag}",
+            )
+
+
+async def restart_panel_process() -> None:
+    # BackgroundTasks runs after the response has been sent, so replacing the
+    # process does not cut off the update response.
+    await asyncio.sleep(0.5)
+    main_path = os.path.join(BASE_DIR, "backend", "main.py")
+    os.execv(sys.executable, [sys.executable, main_path])
 
 
 def get_payload_dir(extract_dir: str) -> str:
@@ -114,7 +183,10 @@ async def check_update():
         return {"current": get_current_version(), "latest": "unknown", "update_available": False}
 
 @router.post("/install")
-async def install_update(current_user: User = Depends(get_current_user)):
+async def install_update(
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+):
     if not current_user.is_admin:
         raise HTTPException(403, "Admin only")
     try:
@@ -155,6 +227,7 @@ async def install_update(current_user: User = Depends(get_current_user)):
                     safe_extract_tar(tar, extract_dir)
 
                 payload_dir = get_payload_dir(extract_dir)
+                await asyncio.to_thread(prepare_update_runtime, payload_dir)
 
                 # Files/dirs to preserve (user data)
                 skip_dirs = {"servers", "avatars", "__pycache__"}
@@ -191,10 +264,11 @@ async def install_update(current_user: User = Depends(get_current_user)):
                     else:
                         shutil.copy2(src, dst)
 
-            with open(VERSION_FILE, "w") as f:
+            with open(VERSION_FILE, "w", encoding="utf-8") as f:
                 f.write(latest)
 
-            return {"status": "updated", "version": latest}
+            background_tasks.add_task(restart_panel_process)
+            return {"status": "restarting", "version": latest}
     except HTTPException:
         raise
     except Exception as e:

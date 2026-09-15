@@ -592,7 +592,21 @@ async function installUpdate() {
   try {
     await axios.post('/api/update/install')
     toast({ title: 'Update complete!', message: 'Restarting panel...', type: 'success' })
-    setTimeout(() => location.reload(), 1500)
+    await new Promise(resolve => setTimeout(resolve, 1500))
+    for (let attempt = 0; attempt < 20; attempt++) {
+      try {
+        await axios.get('/api/update/check', { timeout: 2000, params: { _: Date.now() } })
+        location.reload()
+        return
+      } catch {
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      }
+    }
+    toast({
+      title: 'Restart is taking longer than expected',
+      message: 'Refresh the page once the panel process is available.',
+      type: 'warning',
+    })
   } catch (e) {
     toast({ title: 'Update failed', message: e.response?.data?.detail || 'Unknown error', type: 'error' })
   } finally {

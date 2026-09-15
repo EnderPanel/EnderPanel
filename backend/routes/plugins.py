@@ -2,6 +2,8 @@ import os
 import json
 import httpx
 import re
+import hashlib
+import tempfile
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -9,11 +11,60 @@ from database import get_db
 from models.user import User
 from models.server import Server
 from utils.security import get_current_user
+from routes.files import fix_permissions
 from config import SERVERS_DIR
 
 router = APIRouter(prefix="/api/servers/{server_id}/mods", tags=["mods"])
 
 MODRINTH_API = "https://api.modrinth.com/v2"
+
+
+def _require_modrinth_response(response: httpx.Response, detail: str) -> None:
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        status_code = 404 if response.status_code == 404 else 502
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+
+
+async def _download_modrinth_file(
+    client: httpx.AsyncClient,
+    file_info: dict,
+    destination_dir: str,
+) -> str:
+    response = await client.get(file_info["url"])
+    _require_modrinth_response(response, "Modrinth file download failed")
+    content = response.content
+    if not content:
+        raise HTTPException(status_code=502, detail="Modrinth returned an empty file")
+
+    hashes = file_info.get("hashes") or {}
+    verified = False
+    for algorithm in ("sha512", "sha1"):
+        expected = str(hashes.get(algorithm, "")).lower()
+        if expected:
+            actual = hashlib.new(algorithm, content).hexdigest()
+            if actual != expected:
+                raise HTTPException(status_code=502, detail="Modrinth file checksum mismatch")
+            verified = True
+            break
+    if not verified:
+        raise HTTPException(status_code=502, detail="Modrinth file has no supported checksum")
+
+    expected_size = file_info.get("size")
+    if isinstance(expected_size, int) and expected_size != len(content):
+        raise HTTPException(status_code=502, detail="Modrinth file size mismatch")
+
+    destination = safe_child_path(destination_dir, file_info.get("filename"))
+    fd, temporary_path = tempfile.mkstemp(prefix=".modrinth-", dir=destination_dir)
+    try:
+        with os.fdopen(fd, "wb") as output:
+            output.write(content)
+        os.replace(temporary_path, destination)
+    finally:
+        if os.path.exists(temporary_path):
+            os.remove(temporary_path)
+    return destination
 
 def sanitize_name(name: str) -> str:
     return re.sub(r'[^a-zA-Z0-9_-]', '_', name)
@@ -100,6 +151,7 @@ async def search_mods(server_id: int, query: str = "", page: int = 1, db: Sessio
             f"{MODRINTH_API}/search",
             params={"query": query, "facets": facets, "limit": 20, "offset": offset}
         )
+        _require_modrinth_response(response, "Modrinth search failed")
         data = response.json()
         data["server_type"] = server.server_type
         data["project_type"] = project_type
@@ -162,6 +214,7 @@ async def check_updates(server_id: int, db: Session = Depends(get_db), current_u
                     f"{MODRINTH_API}/project/{project_id}/version",
                     params={"game_versions": f'["{server.version}"]', "loaders": loaders_param}
                 )
+                _require_modrinth_response(versions_response, "Could not check Modrinth updates")
                 versions = versions_response.json()
 
                 if versions:
@@ -218,6 +271,7 @@ async def link_modrinth(server_id: int, filename: str, project_id: str, db: Sess
     async with httpx.AsyncClient() as client:
         try:
             project_response = await client.get(f"{MODRINTH_API}/project/{project_id}")
+            _require_modrinth_response(project_response, "Modrinth project not found")
             project = project_response.json()
             project_title = project.get("title", project_id)
         except Exception:
@@ -230,6 +284,7 @@ async def link_modrinth(server_id: int, filename: str, project_id: str, db: Sess
             f"{MODRINTH_API}/project/{project_id}/version",
             params={"game_versions": f'["{server.version}"]', "loaders": loaders_param}
         )
+        _require_modrinth_response(versions_response, "Could not load Modrinth versions")
         versions = versions_response.json()
 
     installed_version = "unknown"
@@ -291,6 +346,7 @@ async def update_mod(server_id: int, filename: str, db: Session = Depends(get_db
             f"{MODRINTH_API}/project/{project_id}/version",
             params={"game_versions": f'["{server.version}"]', "loaders": loaders_param}
         )
+        _require_modrinth_response(versions_response, "Could not load Modrinth versions")
         versions = versions_response.json()
 
         if not versions:
@@ -298,16 +354,13 @@ async def update_mod(server_id: int, filename: str, db: Session = Depends(get_db
 
         latest = versions[0]
 
-        old_file_path = safe_child_path(mods_dir, filename)
-        if os.path.exists(old_file_path):
-            os.remove(old_file_path)
-
         for file in latest["files"]:
             if file["primary"]:
-                download_response = await client.get(file["url"])
-                file_path = safe_child_path(mods_dir, file["filename"])
-                with open(file_path, "wb") as f:
-                    f.write(download_response.content)
+                await _download_modrinth_file(client, file, mods_dir)
+                old_file_path = safe_child_path(mods_dir, filename)
+                new_file_path = safe_child_path(mods_dir, file["filename"])
+                if old_file_path != new_file_path and os.path.exists(old_file_path):
+                    os.remove(old_file_path)
 
                 if filename in metadata.get("mods", {}):
                     del metadata["mods"][filename]
@@ -374,26 +427,28 @@ async def install_mod(server_id: int, project_id: str, version_id: str = None, d
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
 
-    import subprocess as _sp
     _, loaders, install_dir = get_modrinth_config(server.server_type)
     loaders_param = "[" + ",".join(f'"{l}"' for l in loaders) + "]"
     mods_dir = os.path.join(get_server_dir(server_id, server.name), install_dir)
     os.makedirs(mods_dir, exist_ok=True)
-    _sp.run(["sudo", "chmod", "-R", "777", mods_dir], check=False, capture_output=True)
+    fix_permissions(mods_dir)
 
     async with httpx.AsyncClient() as client:
         project_response = await client.get(f"{MODRINTH_API}/project/{project_id}")
+        _require_modrinth_response(project_response, "Modrinth project not found")
         project = project_response.json()
         project_title = project.get("title", project_id)
 
         if version_id:
             version_response = await client.get(f"{MODRINTH_API}/version/{version_id}")
+            _require_modrinth_response(version_response, "Modrinth version not found")
             version = version_response.json()
         else:
             versions_response = await client.get(
                 f"{MODRINTH_API}/project/{project_id}/version",
                 params={"game_versions": f'["{server.version}"]', "loaders": loaders_param}
             )
+            _require_modrinth_response(versions_response, "Could not load Modrinth versions")
             versions = versions_response.json()
 
             if not versions:
@@ -403,10 +458,7 @@ async def install_mod(server_id: int, project_id: str, version_id: str = None, d
 
         for file in version["files"]:
             if file["primary"]:
-                download_response = await client.get(file["url"])
-                file_path = safe_child_path(mods_dir, file["filename"])
-                with open(file_path, "wb") as f:
-                    f.write(download_response.content)
+                await _download_modrinth_file(client, file, mods_dir)
 
                 metadata = load_metadata(server_id, server.name)
                 metadata.setdefault("mods", {})[file["filename"]] = {

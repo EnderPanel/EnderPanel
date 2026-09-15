@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from fastapi import Response
 from database import get_db
@@ -54,10 +54,20 @@ def get_user(user_id: int, db: Session = Depends(get_db), current_user: User = D
     }
 
 class UserUpdate(BaseModel):
-    username: Optional[str] = None
-    email: Optional[str] = None
-    password: Optional[str] = None
+    username: Optional[str] = Field(None, min_length=3, max_length=50, pattern=r"^[A-Za-z0-9_.-]+$")
+    email: Optional[str] = Field(None, min_length=3, max_length=100)
+    password: Optional[str] = Field(None, min_length=10, max_length=256)
     is_admin: Optional[bool] = None
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        value = value.strip().lower()
+        if value.count("@") != 1 or value.startswith("@") or value.endswith("@"):
+            raise ValueError("Invalid email address")
+        return value
 
 @router.put("/{user_id}")
 def update_user(user_id: int, data: UserUpdate, response: Response, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

@@ -317,9 +317,15 @@ INJECTION_PATTERNS = [
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
     path = request.url.path
+    csrf_exempt_paths = {
+        "/api/auth/login",
+        "/api/auth/register",
+        "/api/auth/logout",
+    }
 
     if (
         path.startswith("/api/")
+        and path not in csrf_exempt_paths
         and request.method.upper() not in {"GET", "HEAD", "OPTIONS"}
         and request.cookies.get(AUTH_COOKIE_NAME)
         and not request.headers.get("authorization")

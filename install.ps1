@@ -275,6 +275,7 @@ if (-not $DockerCmd) {
 }
 foreach ($Image in @(
     @{ Tag = "latest"; Dockerfile = "Dockerfile" },
+    @{ Tag = "java8"; Dockerfile = "Dockerfile.java8" },
     @{ Tag = "java11"; Dockerfile = "Dockerfile.java11" },
     @{ Tag = "java17"; Dockerfile = "Dockerfile.java17" },
     @{ Tag = "java25"; Dockerfile = "Dockerfile.java25" }
@@ -284,7 +285,7 @@ foreach ($Image in @(
         throw "Docker image mc-panel-server:$($Image.Tag) failed to build."
     }
 }
-Write-Success "Java 11, 17, 21, and 25 runtime images are ready."
+Write-Success "Java 8, 11, 17, 21, and 25 runtime images are ready."
 
 Write-Host ""
 Write-Host "=== Installation Complete ===" -ForegroundColor Green

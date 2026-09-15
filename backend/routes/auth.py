@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Form, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 import pyotp
@@ -56,6 +57,11 @@ def user_to_dict(user: User) -> dict:
 @router.post("/register")
 @limiter.limit("5/minute")
 def register(request: Request, user: UserCreate, response: Response, db: Session = Depends(get_db)):
+    # Serialize the first-user decision across processes. Without this lock, two
+    # concurrent registrations on a fresh SQLite database can both become admin.
+    if db.bind is not None and db.bind.dialect.name == "sqlite":
+        db.execute(text("BEGIN IMMEDIATE"))
+
     existing = db.query(User).filter(
         (User.username == user.username) | (User.email == user.email)
     ).first()

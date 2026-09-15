@@ -9,7 +9,7 @@ EnderPanel is a self-hosted, open-source control panel for running Minecraft ser
 - Node.js 20 or newer
 - Docker Engine or Docker Desktop
 
-Java does not need to be installed on the host. EnderPanel builds Java 11, 17, 21, and 25 runtime images from the included Dockerfiles and automatically selects the appropriate image for the chosen Minecraft version.
+Java does not need to be installed on the host. EnderPanel builds Java 8, 11, 17, 21, and 25 runtime images from the included Dockerfiles and automatically selects the appropriate image for the chosen Minecraft version.
 
 The supplied installers can install or guide you through these prerequisites, but review scripts before running them with administrator privileges.
 
